@@ -1,12 +1,14 @@
-// server.js – Quiz "100 Leute gefragt" – Team-Style (Neustart v1.3)
-// NEUES PUNKTESYSTEM (Abstauber-Regel):
-// - Team am Zug muss das Feld KOMPLETT lösen → volle Punktzahl.
-// - Nach 3 falschen Antworten dieses Teams beginnt die Abstauber-Runde:
-//     · Das andere Team hat GENAU EINE CHANCE.
-//     · Bei richtiger Antwort (egal wie viele Antworten noch offen sind): volle Punktzahl an Abstauber-Team.
-//     · Bei falscher Antwort: volle Punktzahl an das ursprüngliche Team (das vorher dran war).
-// - Admin deckt Antworten manuell auf; Tipp-Eingaben sind optional möglich.
-// - Zusätze: Startteam auslosen, Nächste Runde (Startteam wechseln), Fallback-Sounds, Team-Chats, etc.
+// server.js – Quiz "100 Leute gefragt" – Team-Style (v2.0 – neues Punktesystem)
+// NEUES PUNKTESYSTEM & TILE-LABELS:
+// - Kacheln zeigen nur noch 1..5 (kein 10/20/30/40/50).
+// - Punkte = SUMME der aufgedeckten Prozente.
+//   • Start-Team löst ALLE Antworten → bekommt GESAMTSUMME (i. d. R. 100).
+//   • Start-Team macht 3 Fehler → Abstauber-Phase startet:
+//       - Abstauber-Team hat GENAU 1 Chance:
+//           · Richtig → Abstauber-Team bekommt die BIS DAHIN aufgedeckte Prozentsumme.
+//           · Falsch  → Start-Team bekommt die BIS DAHIN aufgedeckte Prozentsumme.
+// - Admin deckt Antworten manuell auf (oder optional per Tipp-Eingabe).
+// - Bonus: Startteam auslosen, Nächste Runde (Startteam wechseln), SFX-Fallback, Team-Chats.
 
 import express from 'express';
 import http from 'http';
@@ -58,7 +60,7 @@ const DATA_PATH = path.join(__dirname, 'public', 'fragen.json');
 function loadData(){
   const raw = JSON.parse(fs.readFileSync(DATA_PATH, 'utf8'));
   raw.categories.forEach(cat=>{
-    cat.items.forEach(it=>{
+    cat.items.forEach((it, idx)=>{
       it.answers = (it.answers||[]).slice(0,5).map(a=>{
         const obj = typeof a === 'string' ? { text:a, percent:0 } : a;
         return {
@@ -66,22 +68,24 @@ function loadData(){
           percent: Number(obj.percent)||0,
           alts: Array.isArray(obj.alts) ? obj.alts : [],
           revealed: false,
-          byTeam: null // 'A'|'B'
+          byTeam: null // 'A'|'B' – nur Historie/Anzeige
         };
       });
       it.answers.sort((x,y)=> (y.percent - x.percent)); // Top → Bottom
-      it.points   = Number(it.points)||10;
+
+      // NEU: Kachel-Label 1..5 (statt 10..50). Wir überschreiben 'points' nur als LABEL.
+      it.points   = (idx+1);      // NUR Anzeige!
       it.q        = it.q || '';
       it.revealed = false;
       it.answered = false;
       it.meta = {
-        originalTeam: null, // Team, das Feld gewählt hat (und komplett lösen muss)
+        originalTeam: null, // Team, das Feld gewählt hat (Start-Team)
         turnTeam: null,     // Team, das aktuell rät
         wrongA: 0,
         wrongB: 0,
         stealActive: false, // Abstauberphase aktiv?
-        stealTeam: null,    // Team, das die 1 Chance hat
-        stealUsed: false    // Sicherheit: wurde die 1 Chance bereits verbraucht?
+        stealTeam: null,    // Team mit 1 Chance
+        stealUsed: false    // Sicherheit
       };
     });
   });
@@ -97,7 +101,7 @@ const state = {
   players: {},            // socketId -> { id,name,team:'A'|'B', score }
   board: db,              // Daten aus fragen.json
   activePlayer: null,     // optional
-  turnTeam: null          // globaler Start-Turn, pro Feld in item.meta.turnTeam
+  turnTeam: null          // globaler Start-Zug, pro Feld in item.meta.turnTeam
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -108,7 +112,7 @@ function publicBoard(){
     categories: state.board.categories.map(c=>({
       name: c.name,
       items: c.items.map(it=>({
-        points:   it.points,
+        points:   it.points,   // Anzeige 1..5
         revealed: it.revealed,
         answered: it.answered,
         answers: it.answers.map(a=>({
@@ -131,6 +135,14 @@ function emitState(){
 function otherTeam(t){ return t==='A' ? 'B' : 'A'; }
 function sanitize(s){ return String(s||'').trim().toLowerCase(); }
 function allFound(item){ return item.answers.every(a=>a.revealed); }
+
+// Punkte nach Prozentsumme
+function getRevealedPercent(item){
+  return item.answers.reduce((acc,a)=> acc + (a.revealed ? Number(a.percent)||0 : 0), 0);
+}
+function getTotalPercent(item){
+  return item.answers.reduce((acc,a)=> acc + (Number(a.percent)||0), 0);
+}
 
 function matchAnswer(item, guess){
   const g = sanitize(guess);
@@ -155,35 +167,42 @@ function awardTeamPoints(team, points){
 
 function startStealPhase(item){
   item.meta.stealActive = true;
-  item.meta.stealTeam   = otherTeam(item.meta.turnTeam);
+  item.meta.stealTeam   = otherTeam(item.meta.turnTeam || item.meta.originalTeam || 'A');
   item.meta.stealUsed   = false;
-  item.meta.turnTeam    = item.meta.stealTeam; // Anzeige: Abstauber-Team ist am Zug
+  item.meta.turnTeam    = item.meta.stealTeam; // Anzeige: Abstauber-Team ist „am Zug“
   io.emit('turn:changed', { turnTeam: item.meta.turnTeam });
 }
 
 function endStealWithResult(catIndex,itemIndex,item, wasCorrect){
-  // Genau EINE Chance: Feld wird sofort beendet
+  // Punkte = bis dahin aufgedeckte Prozentsumme
+  const pts = getRevealedPercent(item);
+  const winner = wasCorrect ? (item.meta.stealTeam || otherTeam(item.meta.originalTeam||'A'))
+                            : (item.meta.originalTeam || otherTeam(item.meta.stealTeam||'A'));
+
   item.meta.stealUsed = true;
-  const winner = wasCorrect ? (item.meta.stealTeam || otherTeam(item.meta.originalTeam))
-                            : (item.meta.originalTeam || otherTeam(item.meta.turnTeam||'A'));
-  awardTeamPoints(winner, item.points);
-  // alle Antworten sichtbar machen für die Anzeige
+
+  awardTeamPoints(winner, pts);
+
+  // Feld beenden & alles zeigen
   item.answers.forEach(a => a.revealed = true);
   item.answered = true;
   item.revealed = true;
-  io.emit('tile:closed', { catIndex,itemIndex,winnerTeam:winner,reason: wasCorrect?'steal-correct':'steal-wrong' });
+
+  io.emit('tile:closed', { catIndex,itemIndex,winnerTeam:winner,reason: wasCorrect?'steal-correct':'steal-wrong', pointsAwarded: pts });
   emitState();
 }
 
-function closeField(catIndex,itemIndex,winnerTeam,reason){
+function closeField(catIndex,itemIndex,winnerTeam,reason, pointsAwarded=null){
   const item = state.board.categories[catIndex].items[itemIndex];
   item.answered = true;
   item.revealed = true;
   item.answers.forEach(a=> a.revealed = true); // alle Antworten sichtbar
-  io.emit('tile:closed', { catIndex,itemIndex,winnerTeam,reason });
+  io.emit('tile:closed', { catIndex,itemIndex,winnerTeam,reason, pointsAwarded });
   emitState();
 }
 
+// ─────────────────────────────────────────────────────────────
+// Socket.IO
 // ─────────────────────────────────────────────────────────────
 io.on('connection', socket => {
   // Rollen
@@ -204,7 +223,7 @@ io.on('connection', socket => {
     emitState();
   });
 
-  // Team-Chat (privat; Admin sieht beide)
+  // Team-Chat
   socket.on('chat:team', ({ msg }) => {
     const p = state.players[socket.id]; if (!p) return;
     const payload = { from:{ id:p.id, name:p.name, team:p.team }, msg:String(msg||'').slice(0,400), ts:Date.now() };
@@ -219,7 +238,7 @@ io.on('connection', socket => {
     io.emit('turn:global', { team:start });
   });
 
-  // Nächste Runde (Admin) – wechselt Startteam und broadcastet neuen globalen Zug
+  // Nächste Runde (Admin)
   socket.on('admin:nextRound', () => {
     const curr = state.turnTeam || 'A';
     const next = curr === 'A' ? 'B' : 'A';
@@ -248,33 +267,30 @@ io.on('connection', socket => {
     emitState();
   });
 
-  // Optionales Tippen (für beide Phasen). Standard: Admin deckt manuell auf.
+  // Optional: Tipp-Antworten (Standard bleibt: Admin deckt auf)
   socket.on('player:guess', ({ catIndex, itemIndex, guess }) => {
     const p = state.players[socket.id]; if (!p) return;
     const cat = state.board.categories[catIndex]; if (!cat) return;
     const item = cat.items[itemIndex]; if (!item || !item.revealed || item.answered) return;
 
-    // Steal-Phase: genau 1 Versuch
+    // STEAL-PHASE: 1 Chance
     if (item.meta.stealActive){
       if (p.team !== item.meta.stealTeam) return; // nur Abstauber-Team
       const idx = matchAnswer(item, guess);
       if (idx >= 0){
-        // richtig → Punkte an Steal-Team, sofort zu
         item.answers[idx].revealed = true;
         item.answers[idx].byTeam   = p.team;
         io.emit('sfx:correct');
         io.emit('answer:revealed', { catIndex,itemIndex, index:idx, text:item.answers[idx].text, percent:item.answers[idx].percent, byTeam:p.team });
         endStealWithResult(catIndex,itemIndex,item,true);
-        return;
       } else {
-        // falsch → Punkte an Originalteam, zu
         io.emit('sfx:wrong');
         endStealWithResult(catIndex,itemIndex,item,false);
-        return;
       }
+      return;
     }
 
-    // Normale Phase (Team muss ALLE finden)
+    // NORMALE PHASE (Start-Team muss ALLES finden)
     if (p.team !== item.meta.turnTeam) return; // nur Team am Zug
 
     const idx = matchAnswer(item, guess);
@@ -285,15 +301,17 @@ io.on('connection', socket => {
       io.emit('answer:revealed', { catIndex,itemIndex, index:idx, text:item.answers[idx].text, percent:item.answers[idx].percent, byTeam:p.team });
 
       if (allFound(item)){
-        awardTeamPoints(item.meta.originalTeam || p.team, item.points); // nur wenn komplett
-        closeField(catIndex,itemIndex,(item.meta.originalTeam||p.team),'all-found');
+        const pts = getTotalPercent(item);               // meist 100
+        const winner = item.meta.originalTeam || p.team; // Start-Team
+        awardTeamPoints(winner, pts);
+        closeField(catIndex,itemIndex,winner,'all-found', pts);
       } else {
         emitState();
       }
       return;
     }
 
-    // falsch in der normalen Phase
+    // falsch in normaler Phase
     io.emit('sfx:wrong');
     if (item.meta.turnTeam === 'A') item.meta.wrongA++; else item.meta.wrongB++;
     const wrongs = (item.meta.turnTeam === 'A') ? item.meta.wrongA : item.meta.wrongB;
@@ -302,10 +320,10 @@ io.on('connection', socket => {
 
     if (wrongs === 2){
       const next = otherTeam(item.meta.turnTeam);
-      io.to('team-'+next).emit('team:prepare', { catIndex,itemIndex, note:'Ihr dürft euch jetzt im Team-Chat beraten – Abstauber-Chance ist nah.' });
+      io.to('team-'+next).emit('team:prepare', { catIndex,itemIndex, note:'Ihr dürft euch beraten – Abstauber-Chance ist nah.' });
     }
     if (wrongs >= 3){
-      // Abstauber-Phase starten (1 Chance)
+      // Abstauber-Phase starten
       startStealPhase(item);
     }
 
@@ -315,27 +333,30 @@ io.on('connection', socket => {
   // Admin: Antwort manuell aufdecken
   socket.on('admin:revealAnswer', ({ catIndex,itemIndex, index }) => {
     const item = state.board.categories[catIndex]?.items[itemIndex]; if (!item) return;
+    if (item.answered) return; // Schutz
     const a = item.answers[index]; if (!a || a.revealed) return;
 
-    // In beiden Phasen: "byTeam" dem aktuell bewerteten Team zuordnen (für Historie)
+    // Attribution für Anzeige
     const currentTeam = item.meta.stealActive
       ? (item.meta.stealTeam || otherTeam(item.meta.originalTeam||'A'))
       : (item.meta.turnTeam   || state.turnTeam || item.meta.originalTeam);
 
     a.revealed = true;
     a.byTeam   = currentTeam || null;
+
     io.emit('answer:revealed', { catIndex,itemIndex, index, text:a.text, percent:a.percent, byTeam:a.byTeam });
 
     if (item.meta.stealActive){
-      // Abstauber-Regel: 1 richtige Antwort reicht → sofort Punkte an Steal-Team
+      // Abstauber-Regel: 1 richtige Antwort reicht → sofort Wertung nach bis dahin aufgedeckter Summe
       endStealWithResult(catIndex,itemIndex,item,true);
       return;
     } else {
-      // Normale Phase: erst bei ALLEN Antworten Punkte an Originalteam
+      // Normale Phase: nur wenn ALLE offen → Start-Team bekommt Gesamtsumme
       if (allFound(item)){
+        const pts = getTotalPercent(item);
         const winner = item.meta.originalTeam || currentTeam || 'A';
-        awardTeamPoints(winner, item.points);
-        closeField(catIndex,itemIndex,winner,'admin-full-reveal');
+        awardTeamPoints(winner, pts);
+        closeField(catIndex,itemIndex,winner,'admin-full-reveal', pts);
         return;
       }
       emitState();
@@ -347,8 +368,8 @@ io.on('connection', socket => {
     const cat  = state.board.categories[catIndex]; if (!cat) return;
     const item = cat.items[itemIndex];              if (!item || !item.revealed || item.answered) return;
 
-    // In Steal-Phase: falsche Antwort ⇒ Punkte an Originalteam, sofort zu
     if (item.meta.stealActive){
+      // In Steal-Phase: falsche Antwort → Punkte an Originalteam (bis dahin aufgedeckte Summe)
       io.emit('sfx:wrong');
       endStealWithResult(catIndex,itemIndex,item,false);
       return;
@@ -367,7 +388,6 @@ io.on('connection', socket => {
       io.to('team-'+next).emit('team:prepare', { catIndex, itemIndex, note:'Ihr dürft euch beraten – Abstauber-Chance ist nah.' });
     }
     if (wrongs >= 3){
-      // Abstauber-Phase starten
       startStealPhase(item);
     }
 
@@ -379,14 +399,14 @@ io.on('connection', socket => {
     const item = state.board.categories[catIndex]?.items[itemIndex]; if (!item) return;
     if (item.answered) return;
 
-    // Neues Regelwerk: Wenn Steal aktiv und keine Antwort gegeben wurde → Default an Originalteam.
-    let winner = item.meta.originalTeam || 'A';
-    if (item.meta.stealActive && item.meta.stealUsed === true){
-      // sollte nie passieren, da endStealWithResult das Feld schließt
-    }
+    // Default laut neuem System:
+    //  - In normaler Phase (kein Steal): Punkte = bis jetzt aufgedeckt → an Originalteam
+    //  - In Steal-Phase ohne Versuch: Punkte = bis jetzt aufgedeckt → an Originalteam
+    const pts = getRevealedPercent(item);
+    const winner = item.meta.originalTeam || 'A';
 
-    awardTeamPoints(winner, item.points);
-    closeField(catIndex,itemIndex,winner,'force-close');
+    awardTeamPoints(winner, pts);
+    closeField(catIndex,itemIndex,winner,'force-close', pts);
   });
 
   // Admin: Punkte direkt an Spieler
