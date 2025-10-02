@@ -1,40 +1,288 @@
-css
-.cat{background:linear-gradient(180deg,#122038,#0e1830);border-radius:14px;padding:10px;text-align:center;font-weight:800;letter-spacing:.5px;box-shadow:inset 0 0 0 1px #1e2b48, var(--glow)}
-.tiles{margin-top:10px;display:grid;grid-template-rows:repeat(5,64px);gap:10px}
-.tile{display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#0e1526,#0b1120);border:1px solid #1c2946;border-radius:14px;font-size:22px;cursor:pointer;user-select:none;transition:transform .08s ease, box-shadow .12s ease, border .12s ease}
-.tile:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(0,0,0,.3), var(--glow);border-color:#26406a}
-.tile.used{background:var(--tile-used);opacity:.6;cursor:not-allowed}
+/* =========================
+   100-Leute-Quiz – Gamesco Neon Theme
+   ========================= */
 
+/* ---------- Root + Reset ---------- */
+:root{
+  --bg:#05070c;
+  --card:#0b0f19;
+  --muted:#95a0b6;
+  --acc:#00ffa6;
 
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #2a3547;font-size:12px;color:var(--muted)}
-.small{font-size:12px;color:var(--muted)}
-.list{display:flex;flex-direction:column;gap:6px}
-.player{display:flex;justify-content:space-between;background:#0b1020;border:1px solid #1b2744;padding:8px 10px;border-radius:12px}
-.player.active{outline:2px solid var(--acc);box-shadow:var(--glow)}
-.player.teamA{border-color:#134a3b}
-.player.teamB{border-color:#20395e}
+  --tile:#0f1526;
+  --tile-used:#0a0f1a;
 
+  --red:#ff4d6d;
+  --blue:#4da3ff;
 
-.team-pill{display:inline-block;border-radius:999px;border:1px solid #1c2a46;padding:2px 8px;margin-left:8px}
-.teamA{color:var(--red)}
-.teamB{color:var(--blue)}
+  --green:#00ffa6;
+  --aqua:#00e0ff;
+  --violet:#7a5cff;
 
+  --text:#e8eef7;
 
-.btn{background:linear-gradient(180deg,#0f1729,#0b1221);border:1px solid #1c2a46;color:#e6edf3;border-radius:12px;padding:8px 12px;cursor:pointer}
-.btn.ok{background:linear-gradient(180deg,#113224,#0d261c);border-color:#275a45}
-.btn.warn{background:linear-gradient(180deg,#341313,#261010);border-color:#5e3434}
-.controls{display:flex;flex-wrap:wrap;gap:8px}
-.input{background:#0a1020;border:1px solid #203050;border-radius:10px;padding:8px 10px;color:#e6edf3}
+  --ring:#1c2a46;
+  --ring-strong:#223a66;
 
+  --shadow-lg:0 12px 40px rgba(0,0,0,.35);
+  --glow-soft:0 0 18px rgba(0,255,166,.35), 0 0 36px rgba(0,224,255,.18);
+  --glow-blue:0 0 18px rgba(77,163,255,.35), 0 0 36px rgba(0,224,255,.18);
+  --glow-red:0 0 18px rgba(255,77,109,.35), 0 0 36px rgba(255,77,109,.18);
+}
 
-.modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(4,8,16,.7)}
-.modal.show{display:flex}
-.modal-card{background:#0c1224;border:1px solid #22345a;border-radius:16px;max-width:780px;padding:20px;box-shadow:var(--glow)}
-.modal h3{margin:0 0 6px}
-.modal p{margin:0;font-size:18px}
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  font-family:Inter, system-ui, Segoe UI, Roboto, Arial, sans-serif;
+  color:var(--text);
+  background:
+    radial-gradient(1200px 600px at 10% 0%, rgba(0,224,255,.08), transparent),
+    radial-gradient(1200px 600px at 90% 100%, rgba(255,77,109,.06), transparent),
+    var(--bg);
+}
 
+img{ max-width:100%; display:block; }
+button{ font:inherit; }
+a{ color:inherit; }
 
-.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-.notice{padding:10px;border:1px dashed #2a3547;border-radius:12px;background:#0a1020;color:#bcd}
-.answer-row{display:flex;justify-content:space-between;border:1px solid #1a2946;background:#0a1020;border-radius:8px;padding:6px 8px}
-.answer-row.revealed{background:#0f1a2e}
+/* ---------- Layout ---------- */
+.container{ max-width:1200px; margin:24px auto; padding:0 16px; }
+.header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+.h{ font-size:24px; margin:0 0 12px; letter-spacing:.2px; }
+.row{ display:flex; gap:16px; align-items:stretch; flex-wrap:wrap; }
+.card{
+  background:linear-gradient(180deg,#0c111d,#0a0f19);
+  border:1px solid #142034;
+  border-radius:18px;
+  padding:16px;
+  box-shadow:var(--shadow-lg);
+}
+
+/* ---------- Board (5 Spalten, responsive) ---------- */
+.board{
+  display:grid;
+  grid-template-columns:repeat(5, minmax(150px, 1fr));
+  gap:12px;
+  overflow-x:auto;
+  padding-bottom:4px;
+  scrollbar-width:thin;
+  scrollbar-color:#1e2b48 transparent;
+}
+.board::-webkit-scrollbar{ height:8px; }
+.board::-webkit-scrollbar-thumb{ background:#1e2b48; border-radius:8px; }
+
+.cat{
+  position:sticky; top:0;
+  background:
+    linear-gradient(180deg,#122038,#0e1830);
+  border-radius:14px;
+  padding:10px;
+  text-align:center;
+  font-weight:800;
+  letter-spacing:.6px;
+  text-transform:uppercase;
+  box-shadow:inset 0 0 0 1px #1e2b48, var(--glow-soft);
+}
+
+.tiles{
+  margin-top:10px;
+  display:grid;
+  grid-template-rows:repeat(5,64px);
+  gap:10px;
+}
+
+/* ---------- Tiles ---------- */
+.tile{
+  display:flex; align-items:center; justify-content:center;
+  background:linear-gradient(180deg,#0e1526,#0b1120);
+  border:1px solid #1c2946;
+  border-radius:14px;
+  font-size:22px;
+  font-weight:700;
+  letter-spacing:.4px;
+  cursor:pointer; user-select:none;
+  transition:transform .08s ease, box-shadow .12s ease, border .12s ease, background .12s ease;
+}
+.tile:hover{
+  transform:translateY(-1px);
+  box-shadow:0 8px 24px rgba(0,0,0,.3), var(--glow-soft);
+  border-color:#26406a;
+}
+.tile.used{
+  background:var(--tile-used);
+  opacity:.6;
+  cursor:not-allowed;
+  filter:saturate(.85);
+}
+
+/* Aktives Feld (wenn du im JS classList auf 'active' setzt) */
+.tile.active{
+  outline:2px solid var(--aqua);
+  box-shadow:0 0 0 2px rgba(0,224,255,.25), var(--glow-blue);
+}
+
+/* Team-abhängiger Glanz (optional Klassen auf Spalte/Board setzen) */
+.turnA .tile:not(.used):hover{ box-shadow:0 8px 24px rgba(0,0,0,.3), var(--glow-red); }
+.turnB .tile:not(.used):hover{ box-shadow:0 8px 24px rgba(0,0,0,.3), var(--glow-blue); }
+
+/* ---------- Lists / Players ---------- */
+.badge{
+  display:inline-block;
+  padding:2px 8px;
+  border-radius:999px;
+  border:1px solid #2a3547;
+  font-size:12px;
+  color:var(--muted);
+}
+.small{ font-size:12px; color:var(--muted); }
+.list{ display:flex; flex-direction:column; gap:6px; }
+
+.player{
+  display:flex; justify-content:space-between; align-items:center;
+  background:#0b1020;
+  border:1px solid #1b2744;
+  padding:8px 10px;
+  border-radius:12px;
+}
+.player.active{
+  outline:2px solid var(--acc);
+  box-shadow:var(--glow-soft);
+}
+.player.teamA{ border-color:#2a3146; box-shadow:0 0 0 0 rgba(0,0,0,0); }
+.player.teamB{ border-color:#20395e; }
+
+.team-pill{
+  display:inline-block;
+  border-radius:999px;
+  border:1px solid #1c2a46;
+  padding:2px 8px;
+  margin-left:8px;
+}
+.teamA{ color:var(--red); }
+.teamB{ color:var(--blue); }
+
+/* ---------- Notice / Banner ---------- */
+.notice{
+  padding:10px;
+  border:1px dashed #2a3547;
+  border-radius:12px;
+  background:#0a1020;
+  color:#bcd;
+}
+#turnBanner{
+  border-style:solid;
+  border-color:#223a66;
+  box-shadow:inset 0 0 0 1px #223a66, 0 0 18px rgba(0,224,255,.18);
+}
+
+/* ---------- Buttons & Inputs ---------- */
+.btn{
+  background:linear-gradient(180deg,#0f1729,#0b1221);
+  border:1px solid #1c2a46;
+  color:#e6edf3;
+  border-radius:12px;
+  padding:8px 12px;
+  cursor:pointer;
+  transition:transform .08s ease, box-shadow .12s ease, border .12s ease;
+}
+.btn:hover{ transform:translateY(-1px); box-shadow:var(--glow-soft); border-color:#2a4b7a; }
+.btn:active{ transform:translateY(0); }
+.btn.ok{ background:linear-gradient(180deg,#113224,#0d261c); border-color:#275a45; }
+.btn.warn{ background:linear-gradient(180deg,#341313,#261010); border-color:#5e3434; }
+
+.controls{ display:flex; flex-wrap:wrap; gap:8px; }
+.input{
+  background:#0a1020;
+  border:1px solid #203050;
+  border-radius:10px;
+  padding:8px 10px;
+  color:#e6edf3;
+  min-width:160px;
+}
+.input:focus{
+  outline:none;
+  border-color:#2a4b7a;
+  box-shadow:0 0 0 3px rgba(0,224,255,.12);
+}
+
+/* ---------- Modal ---------- */
+.modal{
+  position:fixed; inset:0;
+  display:none;
+  align-items:center; justify-content:center;
+  background:rgba(4,8,16,.7);
+  backdrop-filter:saturate(1.1) blur(2px);
+}
+.modal.show{ display:flex; }
+.modal-card{
+  background:#0c1224;
+  border:1px solid #22345a;
+  border-radius:16px;
+  max-width:780px;
+  width:min(92vw, 780px);
+  padding:20px;
+  box-shadow:var(--glow-soft);
+}
+.modal h3{ margin:0 0 6px; font-weight:800; letter-spacing:.3px; }
+.modal p{ margin:0; font-size:18px; color:#cfdaef; }
+
+/* ---------- Answers ---------- */
+.answer-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border:1px solid #1a2946;
+  background:#0a1020;
+  border-radius:8px;
+  padding:6px 8px;
+  transition:background .12s ease, border .12s ease, transform .08s ease;
+}
+.answer-row:not(.revealed):hover{ border-color:#2a4b7a; transform:translateY(-1px); }
+.answer-row.revealed{
+  background:#0f1a2e;
+  border-color:#2a3b66;
+  box-shadow:inset 0 0 0 1px #1e2b48;
+}
+
+/* ---------- Chat Bubbles (optional schöner) ---------- */
+.bubble{
+  padding:8px 10px;
+  border-radius:12px;
+  border:1px solid #1b2744;
+  background:#0b1020;
+}
+.bubble.me{ border-color:#2b4a78; box-shadow:var(--glow-blue); }
+.bubble.them{ border-color:#3f2a44; box-shadow:var(--glow-red); }
+
+/* ---------- Scorebar (optional) ---------- */
+.scorebar{
+  position:relative;
+  height:10px;
+  background:#0a1020;
+  border:1px solid #1b2744;
+  border-radius:999px;
+  overflow:hidden;
+}
+.score-fill{ position:absolute; inset:0 0 0 0; width:50%; background:linear-gradient(90deg, var(--aqua), var(--green)); }
+
+/* ---------- Utilities ---------- */
+.hidden{ display:none !important; }
+
+/* ---------- Media ---------- */
+@media (max-width: 960px){
+  .board{ grid-template-columns:repeat(5, minmax(130px, 1fr)); }
+  .tiles{ grid-template-rows:repeat(5,56px); }
+}
+@media (max-width: 720px){
+  .row{ flex-direction:column; }
+  .board{ grid-template-columns:repeat(5, minmax(120px, 1fr)); }
+  .tiles{ grid-template-rows:repeat(5,52px); }
+}
+
+/* ---------- Fun: subtle pulse when team is at turn (apply .turnA or .turnB to body) ---------- */
+@keyframes pulseA { 0%{ box-shadow:var(--glow-red); } 50%{ box-shadow:0 0 0 0 rgba(0,0,0,0);} 100%{ box-shadow:var(--glow-red);} }
+@keyframes pulseB { 0%{ box-shadow:var(--glow-blue);} 50%{ box-shadow:0 0 0 0 rgba(0,0,0,0);} 100%{ box-shadow:var(--glow-blue);} }
+
+.turnA .cat{ animation:pulseA 2.2s ease-in-out infinite; }
+.turnB .cat{ animation:pulseB 2.2s ease-in-out infinite; }
