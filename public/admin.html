@@ -1,67 +1,231 @@
-html
-function renderAnswersAdmin(ci,ii,admBoard){
-answersDiv.innerHTML='';
-const item = admBoard.categories[ci]?.items[ii];
-if(!item) return;
-answersDiv.appendChild(el('div',{class:'small'}, `Frage: ${item.q}`));
-item.answers.forEach((a,idx)=>{
-const row=el('div',{class:'answer-row '+(a.revealed?'revealed':'')},
-el('div',{}, `${idx+1}. ${a.text}`),
-el('div',{}, `${a.percent}%`)
-);
-if(!a.revealed){
-row.style.cursor = 'pointer';
-row.title = 'Antwort manuell aufdecken';
-row.onclick = ()=> socket.emit('admin:revealAnswer',{ catIndex:ci, itemIndex:ii, index:idx });
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin · 100 Leute gefragt</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1 class="h">Admin-Panel <span class="small">(alle Antworten sichtbar)</span></h1>
+    <div class="controls">
+      <button class="btn" id="btnDraw">Startteam auslosen</button>
+      <button class="btn warn" id="btnReload">Fragen neu laden</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Linke Spalte: Spieler & Spy-Chat -->
+    <div class="card" style="flex:2">
+      <h2 class="h">Spieler & Teams</h2>
+      <div id="players" class="list"></div>
+
+      <h2 class="h" style="margin-top:10px">Team-Chats (live)</h2>
+      <div class="small">Admin sieht beide Team-Chats in Echtzeit</div>
+      <div id="spy" class="list" style="max-height:220px; overflow:auto"></div>
+    </div>
+
+    <!-- Rechte Spalte: Brett & Antworten -->
+    <div class="card" style="flex:3">
+      <h2 class="h">Brett</h2>
+      <div id="board" class="board"></div>
+
+      <div id="answers" style="margin-top:12px"></div>
+
+      <div class="controls" style="margin-top:10px">
+        <input id="awId" class="input" placeholder="Spieler-ID" />
+        <input id="awVal" class="input" type="number" value="10" />
+        <button class="btn ok" id="btnAward">Punkte an Spieler</button>
+        <button class="btn" id="btnForce">Feld schließen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<audio id="sfxCorrect" src="/sfx/correct.mp3" preload="auto"></audio>
+<audio id="sfxWrong"   src="/sfx/wrong.mp3"   preload="auto"></audio>
+
+<script>
+const socket = io();
+socket.emit('role:admin');
+
+let lastTile = null; // {ci, ii}
+let adminBoardCache = null;
+
+// Mini-Helper
+function el(t, attrs={}, ...children){
+  const e = document.createElement(t);
+  Object.entries(attrs).forEach(([k,v]) => e.setAttribute(k, v));
+  children.forEach(c => e.appendChild(typeof c==='string' ? document.createTextNode(c) : c));
+  return e;
 }
-answersDiv.appendChild(row);
-});
+
+// Refs
+const playersDiv = document.getElementById('players');
+const boardDiv   = document.getElementById('board');
+const answersDiv = document.getElementById('answers');
+const spyDiv     = document.getElementById('spy');
+
+// Spieler rendern
+function renderPlayers(players){
+  playersDiv.innerHTML = '';
+  players.forEach(p => {
+    const row = el('div', { class:'player ' + (p.team==='A' ? 'teamA' : 'teamB') },
+      el('div', {}, `${p.name} · Team ${p.team}`, el('span',{class:'badge'}, p.id.slice(0,6))),
+      el('div', {}, `${p.score} Punkte`)
+    );
+    row.onclick = () => { document.getElementById('awId').value = p.id; };
+    playersDiv.appendChild(row);
+  });
 }
 
+// Brett rendern
+function renderBoard(board){
+  boardDiv.innerHTML = '';
+  board.categories.forEach((cat, ci) => {
+    const col = el('div', {});
+    col.appendChild(el('div', {class:'cat'}, cat.name));
+    const tiles = el('div', {class:'tiles'});
+    cat.items.forEach((it, ii) => {
+      const used = it.revealed || it.answered;
+      const d = el('div', { class: 'tile' + (used ? ' used' : '') }, String(it.points));
+      d.onclick = () => {
+        if (used) return;
+        lastTile = { ci:ci, ii:ii };
+        socket.emit('player:pickTile', { catIndex:ci, itemIndex:ii }); // Admin darf ebenfalls öffnen
+      };
+      tiles.appendChild(d);
+    });
+    col.appendChild(tiles);
+    boardDiv.appendChild(col);
+  });
+}
 
-socket.on('state:update', (data)=>{ renderPlayers(data.players); renderBoard(data.board); });
+// *** NEU: Admin-Ansicht Antworten inkl. Meta, Fehlversuche, Badges, Reveal-All ***
+function renderAnswersAdmin(ci, ii, admBoard){
+  adminBoardCache = admBoard;
+  answersDiv.innerHTML = '';
+  const item = admBoard?.categories?.[ci]?.items?.[ii];
+  if (!item) return;
 
+  // Kopfzeile mit Frage
+  answersDiv.appendChild(
+    el('div', {class:'small'}, `Frage: ${item.q}`)
+  );
 
-socket.on('state:admin', (data)=>{
-renderPlayers(data.players); renderBoard(data.board);
-if (lastTile) renderAnswersAdmin(lastTile.ci,lastTile.ii,data.board);
+  // Meta-Zeile: Punkte, Am Zug, Original, Fehlversuche A/B
+  const meta = el('div', {class:'player'},
+    el('div', {},
+      `Punkte: ${item.points} `,
+      el('span', {class: 'team-pill ' + (item.meta.turnTeam==='A' ? 'teamA' : 'teamB')},
+        `Am Zug: Team ${item.meta.turnTeam ?? '–'}`
+      ),
+      el('span', {class: 'team-pill', style: 'margin-left:8px'},
+        `Original: Team ${item.meta.originalTeam ?? '–'}`
+      )
+    ),
+    el('div', {},
+      `Fehlversuche A: ${item.meta.wrongA ?? 0}/3 · B: ${item.meta.wrongB ?? 0}/3`
+    )
+  );
+  answersDiv.appendChild(meta);
+
+  // Antwortenliste (klickbar zum manuellen Reveal)
+  item.answers.forEach((a, idx) => {
+    const row = el('div', {class:'answer-row ' + (a.revealed ? 'revealed' : '')});
+    const left  = el('div', {}, `${idx+1}. ${a.text}`);
+    const right = el('div', {}, `${a.percent}%`);
+
+    if (a.byTeam) {
+      right.appendChild(
+        el('span', {class: 'team-pill ' + (a.byTeam==='A' ? 'teamA' : 'teamB'), style:'margin-left:8px'}, `Team ${a.byTeam}`)
+      );
+    }
+
+    row.appendChild(left);
+    row.appendChild(right);
+
+    if (!a.revealed) {
+      row.style.cursor = 'pointer';
+      row.title = 'Antwort manuell aufdecken';
+      row.onclick = () => socket.emit('admin:revealAnswer', { catIndex:ci, itemIndex:ii, index:idx });
+    }
+
+    answersDiv.appendChild(row);
+  });
+
+  // Footer-Controls
+  const footer = el('div', {class:'controls', style:'margin-top:10px'});
+  const revealAllBtn = el('button', {class:'btn', id:'btnRevealAll'}, 'Alle verbleibenden anzeigen');
+  revealAllBtn.onclick = () => {
+    item.answers.forEach((a, idx) => {
+      if (!a.revealed) socket.emit('admin:revealAnswer', { catIndex:ci, itemIndex:ii, index:idx });
+    });
+  };
+  footer.appendChild(revealAllBtn);
+  answersDiv.appendChild(footer);
+}
+
+// *** Events ***
+
+socket.on('state:update', (data) => {
+  renderPlayers(data.players);
+  renderBoard(data.board);
 });
 
-
-socket.on('tile:revealed', (p)=>{
-lastTile = { ci:p.catIndex, ii:p.itemIndex };
-alert(`Team ${p.turnTeam} beginnt – ${p.points} Punkte\n\n${p.question}`);
+socket.on('state:admin', (data) => {
+  renderPlayers(data.players);
+  renderBoard(data.board);
+  // Antworten nur für das zuletzt angeklickte Feld rendern
+  if (lastTile) renderAnswersAdmin(lastTile.ci, lastTile.ii, data.board);
 });
 
-
-socket.on('answer:revealed', ()=>{ document.getElementById('sfxCorrect').play().catch(()=>{}); });
-socket.on('guess:wrong', ()=>{ document.getElementById('sfxWrong').play().catch(()=>{}); });
-
-
-socket.on('chat:spy', (m)=>{
-const row=el('div',{class:'player '+(m.from.team==='A'?'teamA':'teamB')},
-el('div',{}, `[Team ${m.from.team}] ${m.from.name}:`),
-el('div',{}, m.msg)
-);
-spyDiv.appendChild(row);
-spyDiv.scrollTop = spyDiv.scrollHeight;
+socket.on('tile:revealed', (p) => {
+  lastTile = { ci:p.catIndex, ii:p.itemIndex };
+  alert(`Team ${p.turnTeam} beginnt – ${p.points} Punkte\n\n${p.question}`);
 });
 
+// Sound + Live-Refresh der Antwortenzeile (ohne auf kompletten State zu warten)
+socket.on('answer:revealed', (p) => {
+  document.getElementById('sfxCorrect').play().catch(()=>{});
+  if (adminBoardCache && lastTile && lastTile.ci===p.catIndex && lastTile.ii===p.itemIndex) {
+    const it = adminBoardCache.categories?.[p.catIndex]?.items?.[p.itemIndex];
+    if (it && it.answers?.[p.index]) {
+      it.answers[p.index].revealed = true;
+      it.answers[p.index].byTeam   = p.byTeam || null;
+      renderAnswersAdmin(lastTile.ci, lastTile.ii, adminBoardCache);
+    }
+  }
+});
 
-// Controls
+socket.on('guess:wrong', () => {
+  document.getElementById('sfxWrong').play().catch(()=>{});
+});
 
+socket.on('chat:spy', (m) => {
+  const row = el('div', {class:'player ' + (m.from.team==='A' ? 'teamA' : 'teamB')},
+    el('div', {}, `[Team ${m.from.team}] ${m.from.name}:`),
+    el('div', {}, m.msg)
+  );
+  spyDiv.appendChild(row);
+  spyDiv.scrollTop = spyDiv.scrollHeight;
+});
 
-document.getElementById('btnDraw').onclick=()=> socket.emit('admin:drawStartTeam');
-document.getElementById('btnReload').onclick=()=> location.reload();
-document.getElementById('btnAward').onclick=()=>{
-const id=document.getElementById('awId').value.trim();
-const val=parseInt(document.getElementById('awVal').value||'0',10);
-if(!id) return alert('Spieler-ID angeben');
-socket.emit('admin:awardPoints',{ playerId:id, points:val });
+// *** Controls ***
+document.getElementById('btnDraw').onclick  = () => socket.emit('admin:drawStartTeam');
+document.getElementById('btnReload').onclick= () => location.reload();
+document.getElementById('btnAward').onclick = () => {
+  const id  = document.getElementById('awId').value.trim();
+  const val = parseInt(document.getElementById('awVal').value || '0', 10);
+  if (!id) return alert('Spieler-ID angeben');
+  socket.emit('admin:awardPoints', { playerId:id, points:val });
 };
-document.getElementById('btnForce').onclick=()=>{
-if(!lastTile) return alert('Kein Feld aktiv');
-socket.emit('admin:forceClose',{ catIndex:lastTile.ci, itemIndex:lastTile.ii });
+document.getElementById('btnForce').onclick = () => {
+  if (!lastTile) return alert('Kein Feld aktiv');
+  socket.emit('admin:forceClose', { catIndex:lastTile.ci, itemIndex:lastTile.ii });
 };
 </script>
 </body>
