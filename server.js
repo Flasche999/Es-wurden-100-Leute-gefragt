@@ -1,4 +1,4 @@
-// server.js – Quiz "100 Leute gefragt" – Team-Style (v2.1 – neues Punktesystem + Gewinner-Animation)
+// server.js – Quiz "100 Leute gefragt" – Team-Style (v2.2 – neues Punktesystem + Gewinner-Animation + Hintergrundmusik)
 // NEUES PUNKTESYSTEM & TILE-LABELS:
 // - Kacheln zeigen nur noch 1..5 (kein 10/20/30/40/50).
 // - Punkte = SUMME der aufgedeckten Prozente.
@@ -10,6 +10,7 @@
 // - Admin deckt Antworten manuell auf (oder optional per Tipp-Eingabe).
 // - Bonus: Startteam auslosen, Nächste Runde (Startteam wechseln), SFX-Fallback, Team-Chats.
 // - NEU: Admin-Event „admin:celebrate” → broadcast „celebrate:winner” (Konfetti/Krone bei allen Clients)
+// - NEU: Hintergrundmusik /music/bgm.mp3 mit Silent-Fallback (verhindert 416-Logs)
 
 import express from 'express';
 import http from 'http';
@@ -28,13 +29,13 @@ const io     = new Server(server, { cors: { origin: '*' } });
 app.use(express.json());
 
 // ─────────────────────────────────────────────────────────────
-// SFX-Fallback (vermeidet 416-Logs bei leeren/fehlenden MP3s)
+// Audio-Fallback (vermeidet 416-Logs bei leeren/fehlenden Dateien)
 // ─────────────────────────────────────────────────────────────
 const SILENCE_WAV_BASE64 =
   "UklGRl4RAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YToRAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
-function sendSfxOrSilent(name, res) {
-  const p = path.join(__dirname, "public", "sfx", name);
+function sendMediaOrSilent(subdir, name, res) {
+  const p = path.join(__dirname, "public", subdir, name);
   try {
     const st = fs.statSync(p);
     if (st.isFile() && st.size > 0) {
@@ -46,9 +47,11 @@ function sendSfxOrSilent(name, res) {
   return res.end(Buffer.from(SILENCE_WAV_BASE64, "base64"));
 }
 
-// Vor static:
-app.get("/sfx/correct.mp3", (_req, res) => sendSfxOrSilent("correct.mp3", res));
-app.get("/sfx/wrong.mp3",   (_req, res) => sendSfxOrSilent("wrong.mp3", res));
+// Audio-Routen MÜSSEN vor express.static kommen:
+app.get("/sfx/correct.mp3", (_req, res) => sendMediaOrSilent("sfx",   "correct.mp3", res));
+app.get("/sfx/wrong.mp3",   (_req, res) => sendMediaOrSilent("sfx",   "wrong.mp3",   res));
+// NEU: Hintergrundmusik
+app.get("/music/bgm.mp3",   (_req, res) => sendMediaOrSilent("music", "bgm.mp3",     res));
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/healthz', (_req,res)=>res.status(200).type('text').send('OK'));
@@ -74,8 +77,8 @@ function loadData(){
       });
       it.answers.sort((x,y)=> (y.percent - x.percent)); // Top → Bottom
 
-      // NEU: Kachel-Label 1..5 (statt 10..50). Wir überschreiben 'points' nur als LABEL.
-      it.points   = (idx+1);      // NUR Anzeige!
+      // Kachel-Label 1..5 (statt 10..50). 'points' ist NUR Anzeige.
+      it.points   = (idx+1);
       it.q        = it.q || '';
       it.revealed = false;
       it.answered = false;
@@ -247,7 +250,7 @@ io.on('connection', socket => {
     io.emit('turn:global', { team: next });
   });
 
-  // NEU: Gewinner-Animation (Admin → Alle)
+  // Gewinner-Animation (Admin → Alle)
   socket.on('admin:celebrate', ({ team }) => {
     if (team !== 'A' && team !== 'B') return;
     io.emit('celebrate:winner', { team, ts: Date.now() });
