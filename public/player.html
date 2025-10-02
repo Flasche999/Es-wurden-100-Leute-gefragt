@@ -38,6 +38,7 @@
       <div class="small" id="info">
         Wähle ein Feld, wenn dein Team am Zug ist. <b>Antworten bitte mündlich auf Discord</b> – der Admin deckt die Lösungen auf.
       </div>
+      <div id="toast" class="notice hidden" style="margin-top:10px;"></div>
     </div>
 
     <div class="card" style="flex:1">
@@ -54,16 +55,6 @@
   </div>
 </div>
 
-<!-- Frage/Antworten Modal -->
-<div id="modal" class="modal"><div class="modal-card">
-  <h3 id="qtitle">Frage</h3>
-  <p id="qtext"></p>
-  <div id="alist" style="margin-top:10px"></div>
-  <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end">
-    <button class="btn" id="btnClose">Schließen</button>
-  </div>
-</div></div>
-
 <!-- Audios: auf 'none', Server liefert Fallback falls MP3 fehlt -->
 <audio id="sfxCorrect" src="/sfx/correct.mp3" preload="none"></audio>
 <audio id="sfxWrong"   src="/sfx/wrong.mp3"   preload="none"></audio>
@@ -73,14 +64,20 @@ const socket = io();
 
 let me = { id:null, name:null, team:null };
 let boardCache = null;
-let activeTile = null; // {ci, ii}
 let currentTurnTeam = null;
 
+// Helpers
 function el(t, attrs={}, ...children){
   const e=document.createElement(t);
   Object.entries(attrs).forEach(([k,v])=> e.setAttribute(k,v));
   children.forEach(c=> e.appendChild(typeof c==='string' ? document.createTextNode(c) : c));
   return e;
+}
+function showToast(msg, ms=3500){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  setTimeout(()=> t.classList.add('hidden'), ms);
 }
 
 // Join
@@ -94,7 +91,6 @@ document.getElementById('btnJoin').onclick = () => {
 socket.on('welcome', (p) => {
   me = p;
   document.getElementById('me').textContent = `${p.name} · Team ${p.team}`;
-  // Banner/Board direkt passend setzen
   updateTurnBanner(currentTurnTeam);
 });
 
@@ -125,18 +121,28 @@ function renderBoard(board){
     const col = el('div', {});
     col.appendChild(el('div', {class:'cat'}, cat.name));
     const tiles = el('div', {class:'tiles'});
+
     cat.items.forEach((it, ii) => {
-      const used = it.revealed || it.answered;
-      const d = el('div', {class:'tile' + (used?' used':'')}, String(it.points));
-      d.onclick = () => {
-        if (used) return;
-        // Nur mein Team am Zug darf wählen
-        if (!(me.team && currentTurnTeam && me.team === currentTurnTeam)) return;
-        socket.emit('player:pickTile', { catIndex:ci, itemIndex:ii });
-        activeTile = { ci:ci, ii:ii };
-      };
+      // Feld verschwindet während es aktiv ist (revealed & nicht answered)
+      const hiddenDuringPlay = it.revealed && !it.answered;
+
+      const d = el('div', {class:'tile' + (it.answered ? ' used' : '')}, String(it.points));
+
+      if (hiddenDuringPlay){
+        // komplett ausblenden, Platz behalten (kein Layout-Sprung)
+        d.style.visibility = 'hidden';
+        d.style.pointerEvents = 'none';
+      } else {
+        d.onclick = () => {
+          if (it.answered) return;
+          if (!(me.team && currentTurnTeam && me.team === currentTurnTeam)) return; // nur Team am Zug
+          socket.emit('player:pickTile', { catIndex:ci, itemIndex:ii });
+        };
+      }
+
       tiles.appendChild(d);
     });
+
     col.appendChild(tiles);
     boardDiv.appendChild(col);
   });
@@ -182,58 +188,30 @@ socket.on('turn:changed', (p) => {
   updateTurnBanner(p.turnTeam, 'Euer Zug!');
 });
 
-// Modal-Refs
-const modal = document.getElementById('modal');
-const qtitle = document.getElementById('qtitle');
-const qtext  = document.getElementById('qtext');
-const alist  = document.getElementById('alist');
-document.getElementById('btnClose').onclick = () => modal.classList.remove('show');
+// Kein Popup mehr: nur Sounds/Toasts
 
-// Frage aufdecken (bei Feldwahl)
+// Feld gestartet → nur kurzer Hinweis
 socket.on('tile:revealed', p => {
-  activeTile = { ci:p.catIndex, ii:p.itemIndex };
-  qtitle.textContent = `${p.points} Punkte – Team ${p.turnTeam} beginnt`;
-  qtext.textContent  = p.question;
-  // Antwortenliste (Platzhalter, leer bis reveal)
-  alist.innerHTML = '';
-  const item = boardCache.categories[p.catIndex].items[p.itemIndex];
-  item.answers.forEach((a, idx) => {
-    const row = el('div', {class:'answer-row'},
-      el('div', {}, `${idx+1}. —`),
-      el('div', {}, `—%`)
-    );
-    alist.appendChild(row);
-  });
-  modal.classList.add('show');
+  showToast(`Feld gestartet: ${p.points} Punkte – Team ${p.turnTeam} beginnt`);
+  // Das eigentliche Ausblenden des Feldes passiert in renderBoard() nach state:update
 });
 
-// Antwort wurde (vom Admin) aufgedeckt
-socket.on('answer:revealed', p => {
-  if (!activeTile || activeTile.ci!==p.catIndex || activeTile.ii!==p.itemIndex) return;
+// Korrekt / Falsch Sounds
+socket.on('answer:revealed', () => {
   document.getElementById('sfxCorrect').play().catch(()=>{});
-  const rows = alist.querySelectorAll('.answer-row');
-  const row  = rows[p.index]; if (!row) return;
-  row.classList.add('revealed');
-  row.firstChild.textContent = `${p.index+1}. ${p.text}`;
-  row.lastChild.textContent  = `${p.percent}%`;
 });
-
-// Falschantwort-Sound (Info – die Falschantwort wird ja auf Discord gesagt)
-socket.on('guess:wrong', () => document.getElementById('sfxWrong').play().catch(()=>{}));
+socket.on('guess:wrong', () => {
+  document.getElementById('sfxWrong').play().catch(()=>{});
+});
 
 // Hinweis ans wartende Team: beraten
 socket.on('team:prepare', () => {
-  const note = document.createElement('div');
-  note.className = 'notice';
-  note.textContent = 'Ihr dürft euch beraten! Gleich seid ihr am Zug.';
-  document.querySelector('.container').prepend(note);
-  setTimeout(()=> note.remove(), 5000);
+  showToast('Ihr dürft euch beraten! Gleich seid ihr am Zug.', 5000);
 });
 
-// Feld beendet
+// Feld beendet → non-blocking Hinweis (Board aktualisiert sich via state:update)
 socket.on('tile:closed', p => {
-  alert(`Feld beendet – Punkte an Team ${p.winnerTeam}`);
-  modal.classList.remove('show');
+  showToast(`Feld beendet – Punkte an Team ${p.winnerTeam}`);
 });
 
 // Team-Chat
