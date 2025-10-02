@@ -1,76 +1,304 @@
-json
-{ "points": 40, "q": "Ein Grund, warum man zu spät kommt.",
-"answers": [
-{ "text": "Verkehr/Stau", "percent": 46, "alts": ["Stau", "Verkehr"] },
-{ "text": "Verschlafen", "percent": 32 },
-{ "text": "ÖPNV", "percent": 10, "alts": ["Bus", "Bahn"] },
-{ "text": "Suche nach Schlüsseln", "percent": 7, "alts": ["Schlüssel verloren"] },
-{ "text": "Wetter", "percent": 5 }
-]
-},
-{ "points": 50, "q": "Etwas, das Glück bringt.",
-"answers": [
-{ "text": "Kleeblatt", "percent": 34 },
-{ "text": "Hufeisen", "percent": 25 },
-{ "text": "Schornsteinfeger", "percent": 18 },
-{ "text": "Marienkäfer", "percent": 13 },
-{ "text": "Glücksbringer/Amulett", "percent": 10 }
-]
-}
-]
-},
 {
-"name": "Sport",
-"items": [
-{ "points": 10, "q": "Beliebteste Fußballvereine in Deutschland.",
-"answers": [
-{ "text": "Bayern München", "percent": 60, "alts": ["FC Bayern", "FCB"] },
-{ "text": "Borussia Dortmund", "percent": 20, "alts": ["BVB", "Dortmund"] },
-{ "text": "Schalke 04", "percent": 8, "alts": ["Schalke"] },
-{ "text": "RB Leipzig", "percent": 6, "alts": ["Leipzig"] },
-{ "text": "Borussia Mönchengladbach", "percent": 6, "alts": ["Gladbach"] }
-]
-},
-{ "points": 20, "q": "Nenne eine Sportart mit Ball.",
-"answers": [
-{ "text": "Fußball", "percent": 48 },
-{ "text": "Basketball", "percent": 22 },
-{ "text": "Handball", "percent": 14 },
-{ "text": "Tennis", "percent": 10 },
-{ "text": "Volleyball", "percent": 6 }
-]
-},
-{ "points": 30, "q": "Deutsche Sportikone.",
-"answers": [
-{ "text": "Michael Schumacher", "percent": 44 },
-{ "text": "Boris Becker", "percent": 18 },
-{ "text": "Steffi Graf", "percent": 16 },
-{ "text": "Dirk Nowitzki", "percent": 12 },
-{ "text": "Franz Beckenbauer", "percent": 10 }
-]
-},
-{ "points": 40, "q": "Ein olympisches Symbol.",
-"answers": [
-{ "text": "Fünf Ringe", "percent": 70 },
-{ "text": "Fackel", "percent": 12 },
-{ "text": "Medaillen", "percent": 8 },
-{ "text": "Olympische Hymne", "percent": 5 },
-{ "text": "Maskottchen", "percent": 5 }
-]
-},
-{ "points": 50, "q": "Etwas im Fußballstadion.",
-"answers": [
-{ "text": "Fans/Ultras", "percent": 38 },
-{ "text": "Tore", "percent": 22 },
-{ "text": "Rasen", "percent": 16 },
-{ "text": "Wurst/Bier", "percent": 14 },
-{ "text": "Choreos", "percent": 10 }
-]
-}
-]
-},
-{ "name": "Games", "items": [ { "points": 10, "q": "Beliebtes Genre.", "answers": [ {"text":"Action/Adventure","percent":40},{"text":"Shooter","percent":22},{"text":"RPG","percent":16},{"text":"Sport","percent":12},{"text":"Racing","percent":10} ] }, { "points": 20, "q": "Bekannte Plattform.", "answers": [ {"text":"Steam","percent":46},{"text":"PlayStation","percent":24},{"text":"Xbox","percent":14},{"text":"Nintendo","percent":10},{"text":"Epic Games","percent":6} ] }, { "points": 30, "q": "Controller-Taste.", "answers": [ {"text":"A/X","percent":30},{"text":"B/O","percent":26},{"text":"Y/Triangle","percent":18},{"text":"X/Square","percent":16},{"text":"Start","percent":10} ] }, { "points": 40, "q": "Klassische Figur.", "answers": [ {"text":"Mario","percent":48},{"text":"Sonic","percent":18},{"text":"Link","percent":14},{"text":"Pikachu","percent":12},{"text":"Lara Croft","percent":8} ] }, { "points": 50, "q": "Multiplayer-Prinzip.", "answers": [ {"text":"Battle Royale","percent":34},{"text":"Team Deathmatch","percent":22},{"text":"Capture the Flag","percent":16},{"text":"Coop","percent":14},{"text":"Survival","percent":14} ] } ] },
-{ "name": "Filme", "items": [ { "points": 10, "q": "Kino-Snack.", "answers": [ {"text":"Popcorn","percent":60},{"text":"Nachos","percent":20},{"text":"Süßigkeiten","percent":8},{"text":"Eis","percent":6},{"text":"Hotdog","percent":6} ] }, { "points": 20, "q": "Filmgenre.", "answers": [ {"text":"Komödie","percent":32},{"text":"Action","percent":28},{"text":"Drama","percent":18},{"text":"Horror","percent":12},{"text":"Sci-Fi","percent":10} ] }, { "points": 30, "q": "Berühmter Regisseur.", "answers": [ {"text":"Steven Spielberg","percent":34},{"text":"Christopher Nolan","percent":22},{"text":"Quentin Tarantino","percent":18},{"text":"James Cameron","percent":16},{"text":"Martin Scorsese","percent":10} ] }, { "points": 40, "q": "Preisverleihung.", "answers": [ {"text":"Oscars","percent":70},{"text":"Golden Globes","percent":12},{"text":"BAFTA","percent":8},{"text":"Cannes","percent":6},{"text":"Berlinale","percent":4} ] }, { "points": 50, "q": "Drehort.", "answers": [ {"text":"Hollywood","percent":50},{"text":"New York","percent":16},{"text":"London","percent":12},{"text":"Berlin","percent":12},{"text":"Vancouver","percent":10} ] } ] },
-{ "name": "Allgemein", "items": [ { "points": 10, "q": "Etwas auf dem Frühstückstisch.", "answers": [ {"text":"Brötchen","percent":36},{"text":"Butter","percent":22},{"text":"Marmelade","percent":16},{"text":"Kaffee","percent":14},{"text":"Käse","percent":12} ] }, { "points": 20, "q": "Transportmittel in der Stadt.", "answers": [ {"text":"Bus","percent":34},{"text":"U-Bahn","percent":24},{"text":"Auto","percent":18},{"text":"Tram","percent":14},{"text":"Fahrrad","percent":10} ] }, { "points": 30, "q": "Europäisches Land.", "answers": [ {"text":"Deutschland","percent":30},{"text":"Frankreich","percent":22},{"text":"Italien","percent":18},{"text":"Spanien","percent":16},{"text":"Niederlande","percent":14} ] }, { "points": 40, "q": "Etwas mit Batterie.", "answers": [ {"text":"Fernbedienung","percent":28},{"text":"Taschenlampe","percent":22},{"text":"Spielzeug","percent":18},{"text":"Uhr","percent":16},{"text":"Kamera","percent":16} ] }, { "points": 50, "q": "Beliebtes Getränk.", "answers": [ {"text":"Wasser","percent":40},{"text":"Cola","percent":20},{"text":"Saft","percent":16},{"text":"Kaffee","percent":14},{"text":"Tee","percent":10} ] } ] }
-]
+  "categories": [
+    {
+      "name": "Fun Facts",
+      "items": [
+        {
+          "points": 10,
+          "q": "Nenne etwas, das viele Menschen sammeln.",
+          "answers": [
+            { "text": "Briefmarken", "percent": 35, "alts": ["Marken"] },
+            { "text": "Münzen", "percent": 28 },
+            { "text": "Figuren", "percent": 15, "alts": ["Actionfiguren", "Sammelfiguren"] },
+            { "text": "Autogramme", "percent": 12 },
+            { "text": "Karten", "percent": 10, "alts": ["Pokémonkarten", "Trading Cards"] }
+          ]
+        },
+        {
+          "points": 20,
+          "q": "Nenne ein typisches Haustier.",
+          "answers": [
+            { "text": "Hund", "percent": 52 },
+            { "text": "Katze", "percent": 38 },
+            { "text": "Hamster", "percent": 5 },
+            { "text": "Kaninchen", "percent": 3 },
+            { "text": "Fisch", "percent": 2 }
+          ]
+        },
+        {
+          "points": 30,
+          "q": "Etwas, das man im Kühlschrank findet.",
+          "answers": [
+            { "text": "Milch", "percent": 40 },
+            { "text": "Eier", "percent": 25 },
+            { "text": "Butter", "percent": 15 },
+            { "text": "Käse", "percent": 12 },
+            { "text": "Wurst", "percent": 8 }
+          ]
+        },
+        {
+          "points": 40,
+          "q": "Ein Grund, warum man zu spät kommt.",
+          "answers": [
+            { "text": "Verkehr/Stau", "percent": 46, "alts": ["Stau", "Verkehr"] },
+            { "text": "Verschlafen", "percent": 32 },
+            { "text": "ÖPNV", "percent": 10, "alts": ["Bus", "Bahn"] },
+            { "text": "Suche nach Schlüsseln", "percent": 7, "alts": ["Schlüssel verloren"] },
+            { "text": "Wetter", "percent": 5 }
+          ]
+        },
+        {
+          "points": 50,
+          "q": "Etwas, das Glück bringt.",
+          "answers": [
+            { "text": "Kleeblatt", "percent": 34 },
+            { "text": "Hufeisen", "percent": 25 },
+            { "text": "Schornsteinfeger", "percent": 18 },
+            { "text": "Marienkäfer", "percent": 13 },
+            { "text": "Glücksbringer/Amulett", "percent": 10 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Sport",
+      "items": [
+        {
+          "points": 10,
+          "q": "Beliebteste Fußballvereine in Deutschland.",
+          "answers": [
+            { "text": "Bayern München", "percent": 60, "alts": ["FC Bayern", "FCB"] },
+            { "text": "Borussia Dortmund", "percent": 20, "alts": ["BVB", "Dortmund"] },
+            { "text": "Schalke 04", "percent": 8, "alts": ["Schalke"] },
+            { "text": "RB Leipzig", "percent": 6, "alts": ["Leipzig"] },
+            { "text": "Borussia Mönchengladbach", "percent": 6, "alts": ["Gladbach"] }
+          ]
+        },
+        {
+          "points": 20,
+          "q": "Nenne eine Sportart mit Ball.",
+          "answers": [
+            { "text": "Fußball", "percent": 48 },
+            { "text": "Basketball", "percent": 22 },
+            { "text": "Handball", "percent": 14 },
+            { "text": "Tennis", "percent": 10 },
+            { "text": "Volleyball", "percent": 6 }
+          ]
+        },
+        {
+          "points": 30,
+          "q": "Deutsche Sportikone.",
+          "answers": [
+            { "text": "Michael Schumacher", "percent": 44 },
+            { "text": "Boris Becker", "percent": 18 },
+            { "text": "Steffi Graf", "percent": 16 },
+            { "text": "Dirk Nowitzki", "percent": 12 },
+            { "text": "Franz Beckenbauer", "percent": 10 }
+          ]
+        },
+        {
+          "points": 40,
+          "q": "Ein olympisches Symbol.",
+          "answers": [
+            { "text": "Fünf Ringe", "percent": 70 },
+            { "text": "Fackel", "percent": 12 },
+            { "text": "Medaillen", "percent": 8 },
+            { "text": "Olympische Hymne", "percent": 5 },
+            { "text": "Maskottchen", "percent": 5 }
+          ]
+        },
+        {
+          "points": 50,
+          "q": "Etwas im Fußballstadion.",
+          "answers": [
+            { "text": "Fans/Ultras", "percent": 38 },
+            { "text": "Tore", "percent": 22 },
+            { "text": "Rasen", "percent": 16 },
+            { "text": "Wurst/Bier", "percent": 14 },
+            { "text": "Choreos", "percent": 10 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Games",
+      "items": [
+        {
+          "points": 10,
+          "q": "Beliebtes Genre.",
+          "answers": [
+            { "text": "Action/Adventure", "percent": 40 },
+            { "text": "Shooter", "percent": 22 },
+            { "text": "RPG", "percent": 16 },
+            { "text": "Sport", "percent": 12 },
+            { "text": "Racing", "percent": 10 }
+          ]
+        },
+        {
+          "points": 20,
+          "q": "Bekannte Plattform.",
+          "answers": [
+            { "text": "Steam", "percent": 46 },
+            { "text": "PlayStation", "percent": 24 },
+            { "text": "Xbox", "percent": 14 },
+            { "text": "Nintendo", "percent": 10 },
+            { "text": "Epic Games", "percent": 6 }
+          ]
+        },
+        {
+          "points": 30,
+          "q": "Controller-Taste.",
+          "answers": [
+            { "text": "A/X", "percent": 30 },
+            { "text": "B/O", "percent": 26 },
+            { "text": "Y/Triangle", "percent": 18 },
+            { "text": "X/Square", "percent": 16 },
+            { "text": "Start", "percent": 10 }
+          ]
+        },
+        {
+          "points": 40,
+          "q": "Klassische Figur.",
+          "answers": [
+            { "text": "Mario", "percent": 48 },
+            { "text": "Sonic", "percent": 18 },
+            { "text": "Link", "percent": 14 },
+            { "text": "Pikachu", "percent": 12 },
+            { "text": "Lara Croft", "percent": 8 }
+          ]
+        },
+        {
+          "points": 50,
+          "q": "Multiplayer-Prinzip.",
+          "answers": [
+            { "text": "Battle Royale", "percent": 34 },
+            { "text": "Team Deathmatch", "percent": 22 },
+            { "text": "Capture the Flag", "percent": 16 },
+            { "text": "Coop", "percent": 14 },
+            { "text": "Survival", "percent": 14 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Filme",
+      "items": [
+        {
+          "points": 10,
+          "q": "Kino-Snack.",
+          "answers": [
+            { "text": "Popcorn", "percent": 60 },
+            { "text": "Nachos", "percent": 20 },
+            { "text": "Süßigkeiten", "percent": 8 },
+            { "text": "Eis", "percent": 6 },
+            { "text": "Hotdog", "percent": 6 }
+          ]
+        },
+        {
+          "points": 20,
+          "q": "Filmgenre.",
+          "answers": [
+            { "text": "Komödie", "percent": 32 },
+            { "text": "Action", "percent": 28 },
+            { "text": "Drama", "percent": 18 },
+            { "text": "Horror", "percent": 12 },
+            { "text": "Sci-Fi", "percent": 10 }
+          ]
+        },
+        {
+          "points": 30,
+          "q": "Berühmter Regisseur.",
+          "answers": [
+            { "text": "Steven Spielberg", "percent": 34 },
+            { "text": "Christopher Nolan", "percent": 22 },
+            { "text": "Quentin Tarantino", "percent": 18 },
+            { "text": "James Cameron", "percent": 16 },
+            { "text": "Martin Scorsese", "percent": 10 }
+          ]
+        },
+        {
+          "points": 40,
+          "q": "Preisverleihung.",
+          "answers": [
+            { "text": "Oscars", "percent": 70 },
+            { "text": "Golden Globes", "percent": 12 },
+            { "text": "BAFTA", "percent": 8 },
+            { "text": "Cannes", "percent": 6 },
+            { "text": "Berlinale", "percent": 4 }
+          ]
+        },
+        {
+          "points": 50,
+          "q": "Drehort.",
+          "answers": [
+            { "text": "Hollywood", "percent": 50 },
+            { "text": "New York", "percent": 16 },
+            { "text": "London", "percent": 12 },
+            { "text": "Berlin", "percent": 12 },
+            { "text": "Vancouver", "percent": 10 }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Allgemein",
+      "items": [
+        {
+          "points": 10,
+          "q": "Etwas auf dem Frühstückstisch.",
+          "answers": [
+            { "text": "Brötchen", "percent": 36 },
+            { "text": "Butter", "percent": 22 },
+            { "text": "Marmelade", "percent": 16 },
+            { "text": "Kaffee", "percent": 14 },
+            { "text": "Käse", "percent": 12 }
+          ]
+        },
+        {
+          "points": 20,
+          "q": "Transportmittel in der Stadt.",
+          "answers": [
+            { "text": "Bus", "percent": 34 },
+            { "text": "U-Bahn", "percent": 24 },
+            { "text": "Auto", "percent": 18 },
+            { "text": "Tram", "percent": 14 },
+            { "text": "Fahrrad", "percent": 10 }
+          ]
+        },
+        {
+          "points": 30,
+          "q": "Europäisches Land.",
+          "answers": [
+            { "text": "Deutschland", "percent": 30 },
+            { "text": "Frankreich", "percent": 22 },
+            { "text": "Italien", "percent": 18 },
+            { "text": "Spanien", "percent": 16 },
+            { "text": "Niederlande", "percent": 14 }
+          ]
+        },
+        {
+          "points": 40,
+          "q": "Etwas mit Batterie.",
+          "answers": [
+            { "text": "Fernbedienung", "percent": 28 },
+            { "text": "Taschenlampe", "percent": 22 },
+            { "text": "Spielzeug", "percent": 18 },
+            { "text": "Uhr", "percent": 16 },
+            { "text": "Kamera", "percent": 16 }
+          ]
+        },
+        {
+          "points": 50,
+          "q": "Beliebtes Getränk.",
+          "answers": [
+            { "text": "Wasser", "percent": 40 },
+            { "text": "Cola", "percent": 20 },
+            { "text": "Saft", "percent": 16 },
+            { "text": "Kaffee", "percent": 14 },
+            { "text": "Tee", "percent": 10 }
+          ]
+        }
+      ]
+    }
+  ]
 }
