@@ -13,6 +13,7 @@
     <h1 class="h">Admin-Panel <span class="small">(alle Antworten sichtbar)</span></h1>
     <div class="controls">
       <button class="btn" id="btnDraw">Startteam auslosen</button>
+      <button class="btn" id="btnNextRound">Nächste Runde</button>
       <button class="btn warn" id="btnReload">Fragen neu laden</button>
     </div>
   </div>
@@ -157,7 +158,7 @@ function renderAnswersAdmin(ci, ii, admBoard){
   // Footer-Controls
   const footer = el('div', {class:'controls', style:'margin-top:10px'});
 
-  // NEU: Falschantwort zählen (Team am Zug)
+  // Falschantwort zählen (Team am Zug)
   const wrongBtn = el('button', {class:'btn warn', id:'btnMarkWrong'}, 'Als falsch werten (Team am Zug)');
   wrongBtn.onclick = () => socket.emit('admin:markWrong', { catIndex:ci, itemIndex:ii });
 
@@ -172,9 +173,12 @@ function renderAnswersAdmin(ci, ii, admBoard){
   footer.appendChild(wrongBtn);
   footer.appendChild(revealAllBtn);
   answersDiv.appendChild(footer);
+
+  // Scroll zu Antwortenbereich
+  answersDiv.scrollIntoView({ behavior:'smooth', block:'start' });
 }
 
-// *** Events ***
+// *** Socket Events ***
 
 socket.on('state:update', (data) => {
   renderPlayers(data.players);
@@ -184,13 +188,18 @@ socket.on('state:update', (data) => {
 socket.on('state:admin', (data) => {
   renderPlayers(data.players);
   renderBoard(data.board);
-  // Antworten nur für das zuletzt angeklickte Feld rendern
   if (lastTile) renderAnswersAdmin(lastTile.ci, lastTile.ii, data.board);
 });
 
 socket.on('tile:revealed', (p) => {
   lastTile = { ci:p.catIndex, ii:p.itemIndex };
-  alert(`Team ${p.turnTeam} beginnt – ${p.points} Punkte\n\n${p.question}`);
+  // Kein Blocking-Alert mehr – sofort Antworten-Panel zeigen (sobald Cache da ist)
+  if (adminBoardCache) {
+    renderAnswersAdmin(p.catIndex, p.itemIndex, adminBoardCache);
+  } else {
+    answersDiv.innerHTML = '';
+    answersDiv.appendChild(el('div', {class:'small'}, `Frage: ${p.question}`));
+  }
 });
 
 // Sound + Live-Refresh der Antwortenzeile (ohne auf kompletten State zu warten)
@@ -208,13 +217,10 @@ socket.on('answer:revealed', (p) => {
 
 socket.on('guess:wrong', () => {
   document.getElementById('sfxWrong').play().catch(()=>{});
-  // Der Server sendet danach state:admin → Fehlversuche/Turn werden aktualisiert
 });
 
 socket.on('turn:changed', (p) => {
-  // Optional: visuelles Feedback für Zugwechsel
   if (lastTile && typeof p?.turnTeam !== 'undefined') {
-    // Sofort neu zeichnen, falls wir Cache haben
     if (adminBoardCache) renderAnswersAdmin(lastTile.ci, lastTile.ii, adminBoardCache);
   }
 });
@@ -229,15 +235,16 @@ socket.on('chat:spy', (m) => {
 });
 
 // *** Controls ***
-document.getElementById('btnDraw').onclick  = () => socket.emit('admin:drawStartTeam');
-document.getElementById('btnReload').onclick= () => location.reload();
-document.getElementById('btnAward').onclick = () => {
+document.getElementById('btnDraw').onclick   = () => socket.emit('admin:drawStartTeam');
+document.getElementById('btnNextRound').onclick = () => socket.emit('admin:nextRound'); // NEU: Teamwechsel für die nächste Runde
+document.getElementById('btnReload').onclick = () => location.reload();
+document.getElementById('btnAward').onclick  = () => {
   const id  = document.getElementById('awId').value.trim();
   const val = parseInt(document.getElementById('awVal').value || '0', 10);
   if (!id) return alert('Spieler-ID angeben');
   socket.emit('admin:awardPoints', { playerId:id, points:val });
 };
-document.getElementById('btnForce').onclick = () => {
+document.getElementById('btnForce').onclick  = () => {
   if (!lastTile) return alert('Kein Feld aktiv');
   socket.emit('admin:forceClose', { catIndex:lastTile.ci, itemIndex:lastTile.ii });
 };
