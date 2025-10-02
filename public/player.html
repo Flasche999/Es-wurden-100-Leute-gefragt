@@ -64,8 +64,9 @@
   </div>
 </div></div>
 
-<audio id="sfxCorrect" src="/sfx/correct.mp3" preload="auto"></audio>
-<audio id="sfxWrong"   src="/sfx/wrong.mp3"   preload="auto"></audio>
+<!-- Audios: auf 'none', Server liefert Fallback falls MP3 fehlt -->
+<audio id="sfxCorrect" src="/sfx/correct.mp3" preload="none"></audio>
+<audio id="sfxWrong"   src="/sfx/wrong.mp3"   preload="none"></audio>
 
 <script>
 const socket = io();
@@ -93,6 +94,8 @@ document.getElementById('btnJoin').onclick = () => {
 socket.on('welcome', (p) => {
   me = p;
   document.getElementById('me').textContent = `${p.name} · Team ${p.team}`;
+  // Banner/Board direkt passend setzen
+  updateTurnBanner(currentTurnTeam);
 });
 
 // Spieler-Liste
@@ -113,6 +116,11 @@ const boardDiv = document.getElementById('board');
 function renderBoard(board){
   boardCache = board;
   boardDiv.innerHTML = '';
+
+  // Board für Nicht-Dran-Team deaktivieren
+  const myTurn = (me.team && currentTurnTeam && me.team === currentTurnTeam);
+  boardDiv.classList.toggle('disabled', !myTurn);
+
   board.categories.forEach((cat, ci) => {
     const col = el('div', {});
     col.appendChild(el('div', {class:'cat'}, cat.name));
@@ -122,7 +130,8 @@ function renderBoard(board){
       const d = el('div', {class:'tile' + (used?' used':'')}, String(it.points));
       d.onclick = () => {
         if (used) return;
-        // Spieler darf Feld wählen; Antworten werden NICHT getippt, nur vom Admin aufgedeckt
+        // Nur mein Team am Zug darf wählen
+        if (!(me.team && currentTurnTeam && me.team === currentTurnTeam)) return;
         socket.emit('player:pickTile', { catIndex:ci, itemIndex:ii });
         activeTile = { ci:ci, ii:ii };
       };
@@ -133,14 +142,27 @@ function renderBoard(board){
   });
 }
 
-// Turn-Banner
+// Turn-Banner + Body-Theme
 const turnBanner = document.getElementById('turnBanner');
 function updateTurnBanner(team, reason=''){
   currentTurnTeam = team;
-  if (!team){ turnBanner.style.display='none'; return; }
+
+  document.body.classList.remove('turnA','turnB');
+
+  if (!team){
+    turnBanner.style.display='none';
+    boardDiv.classList.add('disabled'); // bis Auslosung blocken
+    return;
+  }
+
+  document.body.classList.add(team==='A' ? 'turnA' : 'turnB');
   turnBanner.style.display = 'block';
   const name = team === 'A' ? 'Team Rot' : 'Team Blau';
   turnBanner.textContent = `${name} ist am Zug. ${reason}`.trim();
+
+  // Board interaktiv nur für Team am Zug
+  const myTurn = (me.team && currentTurnTeam && me.team === currentTurnTeam);
+  boardDiv.classList.toggle('disabled', !myTurn);
 }
 
 // State-Updates
@@ -157,7 +179,6 @@ socket.on('turn:global', (p) => {
 
 // Turnover
 socket.on('turn:changed', (p) => {
-  const name = p.turnTeam === 'A' ? 'Team Rot' : 'Team Blau';
   updateTurnBanner(p.turnTeam, 'Euer Zug!');
 });
 
