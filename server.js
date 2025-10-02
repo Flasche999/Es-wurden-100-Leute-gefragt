@@ -1,15 +1,14 @@
 // server.js – Quiz "100 Leute gefragt" – Team-Style (Neustart v1.0)
 // Features:
 // - 5 Kategorien × 5 Felder (10–50 Punkte), pro Feld 5 Antworten mit Prozenten (Top→Bottom)
-// - Teams: Rot (A) & Blau (B), je 2 Spieler (beliebig viele unterstützt)
+// - Teams: Rot (A) & Blau (B)
 // - Team-Chat (privat pro Team), Admin sieht beide Chats live
-// - Spiel-Flow: aktives Team wählt Feld → rät per Texteingabe
+// - Flow: Team am Zug wählt Feld, Admin deckt Antworten auf
 //   · pro Team max 3 Falschantworten; nach 2 Falschen bekommt Gegenteam Hinweis zu beraten
 //   · nach 3 Falschen Turnover (Gegenteam am Zug)
-//   · findet Gegenteam die restlichen korrekten Antworten → Volle Punktzahl an Gegenteam
-//   · scheitert Gegenteam ebenfalls (3× falsch) → Punkte an das Team, das die TOP-Antwort (höchste %) gefunden hat
-// - Admin kann alle Antworten/Prozente sehen, Antworten manuell aufdecken, Feld schließen, Punkte vergeben
-// - Sounds: correct/wrong Broadcast-Events
+//   · wenn beide Teams 3× falsch → Punkte an Team mit Top-Antwort, Feld zu
+// - Admin: Antworten manuell aufdecken, Feld schließen, Punkte vergeben, „Als falsch werten“
+// - Sounds: correct/wrong Broadcast-Events (+ Fallback, falls MP3s fehlen)
 
 import express from 'express';
 import http from 'http';
@@ -26,6 +25,30 @@ const server = http.createServer(app);
 const io     = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.json());
+
+// ─────────────────────────────────────────────────────────────
+// SFX-Fallback (vermeidet 416-Logs bei leeren/fehlenden MP3s)
+// ─────────────────────────────────────────────────────────────
+const SILENCE_WAV_BASE64 =
+  "UklGRl4RAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YToRAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
+function sendSfxOrSilent(name, res) {
+  const p = path.join(__dirname, "public", "sfx", name);
+  try {
+    const st = fs.statSync(p);
+    if (st.isFile() && st.size > 0) {
+      return res.sendFile(p);
+    }
+  } catch (_) { /* ignore */ }
+  res.set("Content-Type", "audio/wav");
+  res.set("Cache-Control", "public, max-age=86400");
+  return res.end(Buffer.from(SILENCE_WAV_BASE64, "base64"));
+}
+
+// Diese Routen müssen vor express.static kommen:
+app.get("/sfx/correct.mp3", (_req, res) => sendSfxOrSilent("correct.mp3", res));
+app.get("/sfx/wrong.mp3",   (_req, res) => sendSfxOrSilent("wrong.mp3", res));
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/healthz', (_req,res)=>res.status(200).type('text').send('OK'));
 
@@ -48,8 +71,7 @@ function loadData(){
           byTeam: null // 'A'|'B'
         };
       });
-      // Top → Bottom
-      it.answers.sort((x,y)=> (y.percent - x.percent));
+      it.answers.sort((x,y)=> (y.percent - x.percent)); // Top → Bottom
       it.points   = Number(it.points)||10;
       it.q        = it.q || '';
       it.revealed = false;
@@ -73,7 +95,7 @@ let db = loadData();
 const state = {
   players: {},            // socketId -> { id,name,team:'A'|'B', score }
   board: db,              // Daten aus fragen.json
-  activePlayer: null,     // optional (nicht zwingend genutzt)
+  activePlayer: null,     // optional
   turnTeam: null          // globaler Start-Turn, pro Feld in item.meta.turnTeam
 };
 
@@ -88,7 +110,6 @@ function publicBoard(){
         points:   it.points,
         revealed: it.revealed,
         answered: it.answered,
-        // Antworten nur sichtbar, wenn revealed
         answers: it.answers.map(a=>({
           text:     a.revealed ? a.text    : '',
           percent:  a.revealed ? a.percent : 0,
@@ -98,20 +119,14 @@ function publicBoard(){
     }))
   };
 }
-
-function adminBoard(){ return state.board; } // Admin sieht alles
-
+function adminBoard(){ return state.board; }
 function playersList(){
-  return Object.values(state.players).map(p=>({
-    id: p.id, name: p.name, team: p.team, score: p.score
-  }));
+  return Object.values(state.players).map(p=>({ id:p.id, name:p.name, team:p.team, score:p.score }));
 }
-
 function emitState(){
   io.emit('state:update', { board: publicBoard(), players: playersList(), activePlayer: state.activePlayer });
   io.to('admins').emit('state:admin', { board: adminBoard(), players: playersList(), activePlayer: state.activePlayer });
 }
-
 function otherTeam(t){ return t==='A' ? 'B' : 'A'; }
 function sanitize(s){ return String(s||'').trim().toLowerCase(); }
 function allFound(item){ return item.answers.every(a=>a.revealed); }
@@ -136,7 +151,7 @@ function fieldWinnerOnDoubleFail(item){
 function awardTeamPoints(team, points){
   const members = Object.values(state.players).filter(p=>p.team===team);
   if (members.length===0) return;
-  const per = Math.floor(points / members.length) || points; // falls 1 Spieler: volle Punkte
+  const per = Math.floor(points / members.length) || points; // bei 1 Spieler: volle Punkte
   members.forEach(m=>{
     m.score += per;
     io.emit('score:update', { playerId:m.id, score:m.score, delta:per });
@@ -207,7 +222,7 @@ io.on('connection', socket => {
     emitState();
   });
 
-  // Antwort eines Teams
+  // Antwort eines Teams (falls du je wieder Tipp-Antworten erlaubst)
   socket.on('player:guess', ({ catIndex, itemIndex, guess }) => {
     const p = state.players[socket.id]; if (!p) return;
     const cat = state.board.categories[catIndex]; if (!cat) return;
@@ -224,7 +239,6 @@ io.on('connection', socket => {
       io.emit('answer:revealed', { catIndex,itemIndex, index:idx, text:item.answers[idx].text, percent:item.answers[idx].percent, byTeam:p.team });
 
       if (allFound(item)){
-        // letzte richtige Antwort → volles Feld an dieses Team
         awardTeamPoints(p.team, item.points);
         closeField(catIndex,itemIndex,p.team,'all-found');
       } else {
@@ -236,21 +250,31 @@ io.on('connection', socket => {
     // falsch
     io.emit('sfx:wrong');
     if (item.meta.turnTeam === 'A') item.meta.wrongA++; else item.meta.wrongB++;
+    const wrongs = (item.meta.turnTeam === 'A') ? item.meta.wrongA : item.meta.wrongB;
 
-    const wrongs = item.meta.turnTeam === 'A' ? item.meta.wrongA : item.meta.wrongB;
     io.emit('guess:wrong', { catIndex,itemIndex, team:item.meta.turnTeam, wrongs });
 
     if (wrongs === 2){
-      // Hinweis an Gegenseite: beraten
       const next = otherTeam(item.meta.turnTeam);
       io.to('team-'+next).emit('team:prepare', { catIndex,itemIndex, note:'Ihr dürft euch jetzt im Team-Chat beraten – ihr seid vermutlich gleich am Zug.' });
     }
     if (wrongs >= 3){
-      // Turnover
       const next = otherTeam(item.meta.turnTeam);
       item.meta.turnTeam = next;
       io.emit('turn:changed', { catIndex,itemIndex, turnTeam: next });
+
+      // AUTOCLOSE: wenn jetzt beide Teams ≥3 falsch → Punkte an Top-Antwort-Team
+      const aDone = (item.meta.wrongA >= 3);
+      const bDone = (item.meta.wrongB >= 3);
+      if (aDone && bDone){
+        const winner = fieldWinnerOnDoubleFail(item);
+        awardTeamPoints(winner, item.points);
+        closeField(catIndex,itemIndex,winner,'double-fail-auto');
+        return;
+      }
     }
+
+    emitState();
   });
 
   // Admin: Antwort manuell aufdecken
@@ -260,7 +284,6 @@ io.on('connection', socket => {
     a.revealed = true; a.byTeam = null; // manuell
     io.emit('answer:revealed', { catIndex,itemIndex, index, text:a.text, percent:a.percent, byTeam:null });
     if (allFound(item)){
-      // alles sichtbar → Default: Punkte an Originalteam
       awardTeamPoints(item.meta.originalTeam || 'A', item.points);
       closeField(catIndex,itemIndex,(item.meta.originalTeam||'A'),'admin-full-reveal');
     } else {
@@ -268,14 +291,49 @@ io.on('connection', socket => {
     }
   });
 
+  // NEU: Admin – als falsch werten (erhöht Fehlversuch bei Team am Zug)
+  socket.on('admin:markWrong', ({ catIndex, itemIndex }) => {
+    const cat  = state.board.categories[catIndex]; if (!cat) return;
+    const item = cat.items[itemIndex];              if (!item || !item.revealed || item.answered) return;
+
+    const team = item.meta.turnTeam || state.turnTeam;
+    if (!team) return;
+
+    io.emit('sfx:wrong');
+
+    if (team === 'A') item.meta.wrongA++; else item.meta.wrongB++;
+    const wrongs = (team === 'A') ? item.meta.wrongA : item.meta.wrongB;
+
+    io.emit('guess:wrong', { catIndex:item.meta.catIndex ?? catIndex, itemIndex:item.meta.itemIndex ?? itemIndex, team, wrongs });
+
+    if (wrongs === 2){
+      const next = otherTeam(team);
+      io.to('team-'+next).emit('team:prepare', { catIndex, itemIndex, note:'Ihr dürft euch jetzt im Team-Chat beraten – ihr seid vermutlich gleich am Zug.' });
+    }
+    if (wrongs >= 3){
+      const next = otherTeam(team);
+      item.meta.turnTeam = next;
+      io.emit('turn:changed', { catIndex, itemIndex, turnTeam: next });
+
+      // AUTOCLOSE: beide Teams ≥3 falsch?
+      const aDone = (item.meta.wrongA >= 3);
+      const bDone = (item.meta.wrongB >= 3);
+      if (aDone && bDone){
+        const winner = fieldWinnerOnDoubleFail(item);
+        awardTeamPoints(winner, item.points);
+        closeField(catIndex,itemIndex,winner,'double-fail-auto');
+        return;
+      }
+    }
+
+    emitState();
+  });
+
   // Admin: Feld schließen (Zeit abgelaufen etc.)
   socket.on('admin:forceClose', ({ catIndex,itemIndex }) => {
     const item = state.board.categories[catIndex]?.items[itemIndex]; if (!item) return;
     if (item.answered) return;
 
-    // Gewinnerlogik bei Abbruch:
-    // - beide Teams 3x falsch → Team mit TOP-Antwort
-    // - wenn Gegenteam gerade am Zug (Steal) und scheitert → Originalteam
     const aDone = (item.meta.wrongA >= 3);
     const bDone = (item.meta.wrongB >= 3);
 
@@ -283,7 +341,7 @@ io.on('connection', socket => {
     if (aDone && bDone){
       winner = fieldWinnerOnDoubleFail(item);
     } else if (item.meta.turnTeam !== item.meta.originalTeam){
-      winner = item.meta.originalTeam; // Steal misslungen
+      winner = item.meta.originalTeam; // Steal misslungen → zurück
     } else {
       winner = item.meta.originalTeam; // Fallback
     }
@@ -307,6 +365,14 @@ io.on('connection', socket => {
     if (state.activePlayer === socket.id) state.activePlayer = null;
     emitState();
   });
+});
+
+// Optional: 416 sauber schlucken (falls doch irgendwo auftritt)
+app.use((err, req, res, next) => {
+  if (err && (err.status === 416 || err.statusCode === 416)) {
+    return res.status(204).end();
+  }
+  return next(err);
 });
 
 // ─────────────────────────────────────────────────────────────
