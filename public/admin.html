@@ -6,6 +6,38 @@
   <title>Admin · 100 Leute gefragt</title>
   <link rel="stylesheet" href="/style.css" />
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    /* ===== Winner-Animation (Konfetti + Krone) ===== */
+    #celebrateWrap{
+      position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+      pointer-events:none; z-index:9999;
+    }
+    #celebrateWrap.show{ display:flex; }
+    #celebrateCanvas{ position:absolute; inset:0; width:100%; height:100%; }
+    .crownWrap{
+      position:relative; display:flex; flex-direction:column; align-items:center; gap:6px;
+      background:rgba(5,7,12,.25); border:1px solid rgba(255,255,255,.12);
+      padding:14px 18px; border-radius:16px; backdrop-filter:blur(4px) saturate(1.1);
+      animation:popIn .5s ease-out;
+    }
+    .crown{ font-size:64px; line-height:1; filter:drop-shadow(0 6px 14px rgba(0,0,0,.35)); }
+    .winText{ font-weight:800; letter-spacing:.3px; }
+    .winA{ color:#ff4d6d; text-shadow:0 0 24px rgba(255,77,109,.45); }
+    .winB{ color:#4da3ff; text-shadow:0 0 24px rgba(77,163,255,.45); }
+    @keyframes popIn{
+      0%{ transform:scale(.8); opacity:0; } 100%{ transform:scale(1); opacity:1; }
+    }
+
+    /* ===== Mini-Musik-Controls (Floating) ===== */
+    #musicCtl{
+      position:fixed; right:14px; bottom:14px; z-index:9000;
+      display:flex; align-items:center; gap:8px; padding:8px 10px;
+      background:rgba(10,16,32,.7); border:1px solid #22345a; border-radius:12px;
+      backdrop-filter:blur(3px) saturate(1.1);
+    }
+    #musicCtl button{ min-width:100px }
+    #bgmVol{ width:140px; accent-color:#00e0ff; }
+  </style>
 </head>
 <body>
 <div class="container">
@@ -15,7 +47,7 @@
       <button class="btn" id="btnDraw">Startteam auslosen</button>
       <button class="btn" id="btnNext">Nächste Runde</button>
 
-      <!-- NEU: Gewinner-Anzeige (Konfetti/Krone bei allen Clients) -->
+      <!-- Gewinner-Anzeige (Konfetti/Krone bei allen Clients) -->
       <select class="input" id="winTeam" style="min-width:auto">
         <option value="A">Gewinner: Team Rot (A)</option>
         <option value="B">Gewinner: Team Blau (B)</option>
@@ -26,7 +58,7 @@
     </div>
   </div>
 
-  <!-- NEU: Zug-Banner -->
+  <!-- Zug-Banner -->
   <div id="turnBanner" class="notice" style="display:none; margin-bottom:12px;">—</div>
 
   <div class="row">
@@ -61,6 +93,24 @@
 <audio id="sfxCorrect" src="/sfx/correct.mp3" preload="none"></audio>
 <audio id="sfxWrong"   src="/sfx/wrong.mp3"   preload="none"></audio>
 
+<!-- NEU: Hintergrundmusik (läuft bei allen, mit User-Geste starten) -->
+<audio id="bgm" src="/music/bgm.mp3" preload="none" loop playsinline></audio>
+
+<!-- NEU: Mini-Musik-Controls (floating) -->
+<div id="musicCtl" class="card" style="padding:8px 10px;">
+  <button class="btn" id="btnMusic">Musik ▶︎</button>
+  <input id="bgmVol" type="range" min="0" max="1" step="0.01" title="Lautstärke">
+</div>
+
+<!-- NEU: Winner-Overlay (Konfetti + Krone) -->
+<div id="celebrateWrap">
+  <canvas id="celebrateCanvas"></canvas>
+  <div class="crownWrap" id="crownWrap">
+    <div class="crown">👑</div>
+    <div class="winText" id="winText">Team</div>
+  </div>
+</div>
+
 <script>
 const socket = io();
 socket.emit('role:admin');
@@ -85,7 +135,130 @@ const answersDiv = document.getElementById('answers');
 const spyDiv     = document.getElementById('spy');
 const turnBanner = document.getElementById('turnBanner');
 
-// NEU: Zug-UI aktualisieren (Banner + Body-Klasse + Player-Highlight)
+// ===== Hintergrundmusik =====
+const bgm     = document.getElementById('bgm');
+const btnMus  = document.getElementById('btnMusic');
+const volSl   = document.getElementById('bgmVol');
+
+function updateMusicBtn(){
+  btnMus.textContent = bgm.paused ? 'Musik ▶︎' : 'Musik ⏸';
+}
+
+function tryPlayBgm(){
+  if (!bgm) return;
+  bgm.play().then(updateMusicBtn).catch(()=>{/* Autoplay blockiert bis User-Geste */});
+}
+
+function initBgm(){
+  const savedVol = parseFloat(localStorage.getItem('bgmVol') ?? '0.35');
+  const vol = isFinite(savedVol) ? Math.min(1, Math.max(0, savedVol)) : 0.35;
+  bgm.volume = vol;
+  volSl.value = String(vol);
+
+  updateMusicBtn();
+
+  // Erst auf User-Geste starten (Autoplay-Policy)
+  const startOnce = () => { tryPlayBgm(); document.removeEventListener('pointerdown', startOnce); };
+  document.addEventListener('pointerdown', startOnce, { once:true });
+
+  // Falls Tab wieder fokussiert → weiter spielen
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !bgm.paused) tryPlayBgm();
+  });
+}
+
+btnMus.onclick = () => {
+  if (bgm.paused){ tryPlayBgm(); }
+  else { bgm.pause(); updateMusicBtn(); }
+};
+volSl.oninput = (e) => {
+  const v = parseFloat(e.target.value || '0.35');
+  bgm.volume = v;
+  localStorage.setItem('bgmVol', String(v));
+};
+initBgm();
+
+// ===== Winner-Konfetti & Krone =====
+const celebWrap = document.getElementById('celebrateWrap');
+const canvas    = document.getElementById('celebrateCanvas');
+const ctx       = canvas.getContext('2d');
+const crownWrap = document.getElementById('crownWrap');
+const winText   = document.getElementById('winText');
+
+function resizeCanvas(){
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+
+function confettiBurst(durationMs=4500, team='A'){
+  resizeCanvas();
+  celebWrap.classList.add('show');
+
+  // Text/Farbe
+  if (team === 'A'){
+    winText.textContent = 'Team Rot gewinnt!';
+    winText.className = 'winText winA';
+  } else {
+    winText.textContent = 'Team Blau gewinnt!';
+    winText.className = 'winText winB';
+  }
+
+  // simple particles
+  const colorsA = ['#ff4d6d','#ffd166','#ffffff'];
+  const colorsB = ['#4da3ff','#7ed957','#ffffff'];
+  const colors  = team==='A' ? colorsA : colorsB;
+
+  const N = 180;
+  const P = [];
+  for (let i=0;i<N;i++){
+    P.push({
+      x: Math.random()*canvas.width,
+      y: -20 - Math.random()*canvas.height*0.6,
+      r: 4 + Math.random()*4,
+      c: colors[i % colors.length],
+      vx: -1 + Math.random()*2,
+      vy: 2 + Math.random()*3,
+      rot: Math.random()*Math.PI,
+      vr: -0.2 + Math.random()*0.4
+    });
+  }
+
+  let rafId;
+  const t0 = performance.now();
+  function tick(t){
+    const dt = 16/1000;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    for(const p of P){
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vr;
+      p.vy += 0.02; // gravity
+      // draw rectangle piece
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.c;
+      ctx.fillRect(-p.r, -p.r*0.6, p.r*2, p.r*1.2);
+      ctx.restore();
+      if (p.y > canvas.height + 30) {
+        p.y = -20;
+        p.x = Math.random()*canvas.width;
+        p.vy = 2 + Math.random()*3;
+      }
+    }
+    if (t - t0 < durationMs){
+      rafId = requestAnimationFrame(tick);
+    } else {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      celebWrap.classList.remove('show');
+      cancelAnimationFrame(rafId);
+    }
+  }
+  rafId = requestAnimationFrame(tick);
+}
+
+// ===== NEU: Zug-UI aktualisieren (Banner + Body-Klasse + Player-Highlight)
 function updateTurnUI(team){
   currentTurnTeam = (team === 'A' || team === 'B') ? team : null;
 
@@ -243,7 +416,6 @@ socket.on('turn:changed', (p) => {
 
 socket.on('tile:revealed', (p) => {
   lastTile = { ci:p.catIndex, ii:p.itemIndex };
-  // kein Blocking-Alert nötig
 });
 
 // Sound + Live-Refresh der Antwortenzeile (ohne auf kompletten State zu warten)
@@ -272,13 +444,13 @@ socket.on('chat:spy', (m) => {
   spyDiv.scrollTop = spyDiv.scrollHeight;
 });
 
-// Optional: Bestätigung wenn die Gewinner-Animation ausgelöst wurde
+// Gewinner-Animation bei allen Clients
 socket.on('celebrate:winner', ({ team }) => {
   const who = team === 'A' ? 'Team Rot' : 'Team Blau';
-  // kurzer visueller Hinweis oben
   turnBanner.style.display = 'block';
-  turnBanner.textContent = `🎉 Gewinner-Animation ausgelöst für ${who}`;
-  setTimeout(()=> updateTurnUI(currentTurnTeam), 3000);
+  turnBanner.textContent = `🎉 Gewinner: ${who}`;
+  confettiBurst(5200, team);
+  setTimeout(()=> updateTurnUI(currentTurnTeam), 5400);
 });
 
 // *** Controls ***
@@ -296,7 +468,7 @@ document.getElementById('btnForce').onclick = () => {
   socket.emit('admin:forceClose', { catIndex:lastTile.ci, itemIndex:lastTile.ii });
 };
 
-// NEU: Gewinner-Team anzeigen (Konfetti/Krone bei allen)
+// Gewinner-Team anzeigen (Konfetti/Krone bei allen)
 document.getElementById('btnCelebrate').onclick = () => {
   const t = document.getElementById('winTeam').value;
   if (t !== 'A' && t !== 'B') return;
