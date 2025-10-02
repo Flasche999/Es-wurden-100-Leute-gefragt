@@ -61,6 +61,7 @@ a{ color:inherit; }
 
 /* ---------- Board (5 Spalten, responsive) ---------- */
 .board{
+  position:relative; /* für disabled-Overlay */
   display:grid;
   grid-template-columns:repeat(5, minmax(150px, 1fr));
   gap:12px;
@@ -122,9 +123,9 @@ a{ color:inherit; }
   box-shadow:0 0 0 2px rgba(0,224,255,.25), var(--glow-blue);
 }
 
-/* Team-abhängiger Glanz (optional Klassen auf Spalte/Board setzen) */
-.turnA .tile:not(.used):hover{ box-shadow:0 8px 24px rgba(0,0,0,.3), var(--glow-red); }
-.turnB .tile:not(.used):hover{ box-shadow:0 8px 24px rgba(0,0,0,.3), var(--glow-blue); }
+/* Team-abhängiger Glanz */
+.turnA .tile:not(.used):hover{ box-shadow:0 8px 24px rgba(0,0,0,.3), var(--glow-red); border-color:rgba(255,77,109,.5); }
+.turnB .tile:not(.used):hover{ box-shadow:0 8px 24px rgba(0,0,0,.3), var(--glow-blue); border-color:rgba(77,163,255,.5); }
 
 /* ---------- Lists / Players ---------- */
 .badge{
@@ -149,7 +150,7 @@ a{ color:inherit; }
   outline:2px solid var(--acc);
   box-shadow:var(--glow-soft);
 }
-.player.teamA{ border-color:#2a3146; box-shadow:0 0 0 0 rgba(0,0,0,0); }
+.player.teamA{ border-color:#2a3146; }
 .player.teamB{ border-color:#20395e; }
 
 .team-pill{
@@ -286,3 +287,30 @@ a{ color:inherit; }
 
 .turnA .cat{ animation:pulseA 2.2s ease-in-out infinite; }
 .turnB .cat{ animation:pulseB 2.2s ease-in-out infinite; }
+
+/* ---------- NEW: Board-Block & Team-Highlight ---------- */
+
+/* Board deaktivieren, wenn eigenes Team nicht am Zug ist */
+.board.disabled .tile{
+  pointer-events:none;
+  filter:grayscale(.6) opacity(.55);
+  cursor:not-allowed;
+}
+
+/* Optional dezentes Overlay nur für die nicht-dranzusehende Ansicht */
+.board.disabled::after{
+  content:"Warten – anderes Team ist am Zug";
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  color:#bcd; font-weight:700; letter-spacing:.3px;
+  text-shadow:0 1px 0 #000;
+  background:linear-gradient(180deg, rgba(10,16,32,.6), rgba(9,14,28,.6));
+  border:1px dashed #2a3547; border-radius:18px;
+}
+
+/* Aktives Team in der Liste hervorheben, anderes Team dezent dimmen */
+.turnA .player.teamA{ outline:2px solid rgba(255,77,109,.55); box-shadow:var(--glow-red); }
+.turnB .player.teamB{ outline:2px solid rgba(77,163,255,.55); box-shadow:var(--glow-blue); }
+
+.turnA .player.teamB{ opacity:.6; }
+.turnB .player.teamA{ opacity:.6; }
