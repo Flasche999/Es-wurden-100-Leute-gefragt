@@ -1,4 +1,4 @@
-// server.js – Quiz "100 Leute gefragt" – Team-Style (v2.0 – neues Punktesystem)
+// server.js – Quiz "100 Leute gefragt" – Team-Style (v2.1 – neues Punktesystem + Gewinner-Animation)
 // NEUES PUNKTESYSTEM & TILE-LABELS:
 // - Kacheln zeigen nur noch 1..5 (kein 10/20/30/40/50).
 // - Punkte = SUMME der aufgedeckten Prozente.
@@ -9,6 +9,7 @@
 //           · Falsch  → Start-Team bekommt die BIS DAHIN aufgedeckte Prozentsumme.
 // - Admin deckt Antworten manuell auf (oder optional per Tipp-Eingabe).
 // - Bonus: Startteam auslosen, Nächste Runde (Startteam wechseln), SFX-Fallback, Team-Chats.
+// - NEU: Admin-Event „admin:celebrate” → broadcast „celebrate:winner” (Konfetti/Krone bei allen Clients)
 
 import express from 'express';
 import http from 'http';
@@ -244,6 +245,12 @@ io.on('connection', socket => {
     const next = curr === 'A' ? 'B' : 'A';
     state.turnTeam = next;
     io.emit('turn:global', { team: next });
+  });
+
+  // NEU: Gewinner-Animation (Admin → Alle)
+  socket.on('admin:celebrate', ({ team }) => {
+    if (team !== 'A' && team !== 'B') return;
+    io.emit('celebrate:winner', { team, ts: Date.now() });
   });
 
   // Feld wählen (nur Team am Zug)
