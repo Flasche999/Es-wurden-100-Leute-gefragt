@@ -1,4 +1,4 @@
-// server.js – Quiz "100 Leute gefragt" – Team-Style (Neustart v1.0)
+// server.js – Quiz "100 Leute gefragt" – Team-Style (Neustart v1.1)
 // Features:
 // - 5 Kategorien × 5 Felder (10–50 Punkte), pro Feld 5 Antworten mit Prozenten (Top→Bottom)
 // - Teams: Rot (A) & Blau (B)
@@ -7,7 +7,8 @@
 //   · pro Team max 3 Falschantworten; nach 2 Falschen bekommt Gegenteam Hinweis zu beraten
 //   · nach 3 Falschen Turnover (Gegenteam am Zug)
 //   · wenn beide Teams 3× falsch → Punkte an Team mit Top-Antwort, Feld zu
-// - Admin: Antworten manuell aufdecken, Feld schließen, Punkte vergeben, „Als falsch werten“
+// - Admin: Antworten manuell aufdecken, Feld schließen, Punkte vergeben,
+//          „Als falsch werten“, „Nächste Runde“ (Teamwechsel)
 // - Sounds: correct/wrong Broadcast-Events (+ Fallback, falls MP3s fehlen)
 
 import express from 'express';
@@ -204,6 +205,14 @@ io.on('connection', socket => {
     io.emit('turn:global', { team:start });
   });
 
+  // NEU: Nächste Runde (Admin) – wechselt Startteam und broadcastet neuen globalen Zug
+  socket.on('admin:nextRound', () => {
+    const curr = state.turnTeam || 'A';
+    const next = curr === 'A' ? 'B' : 'A';
+    state.turnTeam = next;
+    io.emit('turn:global', { team: next });
+  });
+
   // Feld wählen (nur Team am Zug)
   socket.on('player:pickTile', ({ catIndex, itemIndex }) => {
     const p = state.players[socket.id]; if (!p) return;
@@ -222,7 +231,7 @@ io.on('connection', socket => {
     emitState();
   });
 
-  // Antwort eines Teams (falls du je wieder Tipp-Antworten erlaubst)
+  // Antwort eines Teams (optional; derzeit raten Spieler mündlich)
   socket.on('player:guess', ({ catIndex, itemIndex, guess }) => {
     const p = state.players[socket.id]; if (!p) return;
     const cat = state.board.categories[catIndex]; if (!cat) return;
@@ -291,7 +300,7 @@ io.on('connection', socket => {
     }
   });
 
-  // NEU: Admin – als falsch werten (erhöht Fehlversuch bei Team am Zug)
+  // Admin – als falsch werten (erhöht Fehlversuch bei Team am Zug)
   socket.on('admin:markWrong', ({ catIndex, itemIndex }) => {
     const cat  = state.board.categories[catIndex]; if (!cat) return;
     const item = cat.items[itemIndex];              if (!item || !item.revealed || item.answered) return;
@@ -304,7 +313,7 @@ io.on('connection', socket => {
     if (team === 'A') item.meta.wrongA++; else item.meta.wrongB++;
     const wrongs = (team === 'A') ? item.meta.wrongA : item.meta.wrongB;
 
-    io.emit('guess:wrong', { catIndex:item.meta.catIndex ?? catIndex, itemIndex:item.meta.itemIndex ?? itemIndex, team, wrongs });
+    io.emit('guess:wrong', { catIndex, itemIndex, team, wrongs });
 
     if (wrongs === 2){
       const next = otherTeam(team);
