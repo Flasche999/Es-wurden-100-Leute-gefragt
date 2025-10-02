@@ -32,7 +32,8 @@
   </div>
 
   <div class="row">
-    <div class="card" style="flex:2">
+    <!-- Ansicht 1: Brett -->
+    <div id="viewBoard" class="card" style="flex:2">
       <h2 class="h">Brett</h2>
       <div id="board" class="board"></div>
       <div class="small" id="info">
@@ -41,6 +42,19 @@
       <div id="toast" class="notice hidden" style="margin-top:10px;"></div>
     </div>
 
+    <!-- Ansicht 2: Aktive Runde (nur die gewählte Kategorie/Frage) -->
+    <div id="viewRound" class="card hidden" style="flex:2">
+      <h2 class="h">Aktive Runde</h2>
+      <div class="small" id="roundMeta"></div>
+      <h3 id="roundTitle" style="margin:6px 0 4px"></h3>
+      <p id="roundQ" style="margin:0 0 10px"></p>
+      <div id="roundList" class="list"></div>
+      <div class="small" style="margin-top:10px">
+        Antworten bitte im Sprachchat/Discord sagen. Der Admin deckt Lösungen live auf.
+      </div>
+    </div>
+
+    <!-- Rechte Spalte: Team & Chat -->
     <div class="card" style="flex:1">
       <h2 class="h">Team</h2>
       <div id="players" class="list"></div>
@@ -65,6 +79,7 @@ const socket = io();
 let me = { id:null, name:null, team:null };
 let boardCache = null;
 let currentTurnTeam = null;
+let activeRound = null; // {ci, ii, points, turnTeam, question}
 
 // Helpers
 function el(t, attrs={}, ...children){
@@ -79,6 +94,8 @@ function showToast(msg, ms=3500){
   t.classList.remove('hidden');
   setTimeout(()=> t.classList.add('hidden'), ms);
 }
+function show(id){ document.getElementById(id).classList.remove('hidden'); }
+function hide(id){ document.getElementById(id).classList.add('hidden'); }
 
 // Join
 document.getElementById('btnJoin').onclick = () => {
@@ -113,7 +130,6 @@ function renderBoard(board){
   boardCache = board;
   boardDiv.innerHTML = '';
 
-  // Board für Nicht-Dran-Team deaktivieren
   const myTurn = (me.team && currentTurnTeam && me.team === currentTurnTeam);
   boardDiv.classList.toggle('disabled', !myTurn);
 
@@ -123,23 +139,12 @@ function renderBoard(board){
     const tiles = el('div', {class:'tiles'});
 
     cat.items.forEach((it, ii) => {
-      // Feld verschwindet während es aktiv ist (revealed & nicht answered)
-      const hiddenDuringPlay = it.revealed && !it.answered;
-
       const d = el('div', {class:'tile' + (it.answered ? ' used' : '')}, String(it.points));
-
-      if (hiddenDuringPlay){
-        // komplett ausblenden, Platz behalten (kein Layout-Sprung)
-        d.style.visibility = 'hidden';
-        d.style.pointerEvents = 'none';
-      } else {
-        d.onclick = () => {
-          if (it.answered) return;
-          if (!(me.team && currentTurnTeam && me.team === currentTurnTeam)) return; // nur Team am Zug
-          socket.emit('player:pickTile', { catIndex:ci, itemIndex:ii });
-        };
-      }
-
+      d.onclick = () => {
+        if (it.answered) return;
+        if (!(me.team && currentTurnTeam && me.team === currentTurnTeam)) return; // nur Team am Zug
+        socket.emit('player:pickTile', { catIndex:ci, itemIndex:ii });
+      };
       tiles.appendChild(d);
     });
 
@@ -171,47 +176,98 @@ function updateTurnBanner(team, reason=''){
   boardDiv.classList.toggle('disabled', !myTurn);
 }
 
+// Runden-Ansicht
+const roundMeta  = document.getElementById('roundMeta');
+const roundTitle = document.getElementById('roundTitle');
+const roundQ     = document.getElementById('roundQ');
+const roundList  = document.getElementById('roundList');
+
+function showRoundView(p){
+  // p: { catIndex,itemIndex, question, points, turnTeam }
+  activeRound = { ci:p.catIndex, ii:p.itemIndex, points:p.points, turnTeam:p.turnTeam, question:p.question };
+
+  roundMeta.textContent  = `Team ${p.turnTeam} beginnt • ${p.points} Punkte`;
+  roundTitle.textContent = `Kategorie läuft`;
+  roundQ.textContent     = p.question;
+
+  // 5 leere Slots bauen (unabhängig vom Board-Cache)
+  roundList.innerHTML = '';
+  for (let i=0;i<5;i++){
+    const row = el('div', {class:'answer-row', id:`ans-${i}`},
+      el('div', {}, `${i+1}. —`),
+      el('div', {}, `—%`)
+    );
+    roundList.appendChild(row);
+  }
+
+  // UI umschalten: Brett aus, Rundenansicht an
+  hide('viewBoard');
+  show('viewRound');
+}
+
+function hideRoundView(){
+  activeRound = null;
+  hide('viewRound');
+  show('viewBoard');
+}
+
 // State-Updates
-socket.on('board:init', renderBoard);
+socket.on('board:init', (b)=>{ renderBoard(b); hideRoundView(); });
 socket.on('state:update', data => {
   renderBoard(data.board);
   renderPlayers(data.players);
+
+  // Falls wir eine Runde anzeigen, aber Feld ist bereits beendet → zurück ins Brett
+  if (activeRound){
+    const it = data.board.categories?.[activeRound.ci]?.items?.[activeRound.ii];
+    if (!it || it.answered){
+      hideRoundView();
+    }
+  }
 });
 
-// Globaler Start-Zug (nach Auslosung)
+// Globaler Start-Zug (nach Auslosung oder „Nächste Runde“)
 socket.on('turn:global', (p) => {
   updateTurnBanner(p.team, 'Wählt ein Feld.');
+  hideRoundView();
 });
 
-// Turnover
+// Turnover innerhalb der Runde (Ansicht bleibt)
 socket.on('turn:changed', (p) => {
   updateTurnBanner(p.turnTeam, 'Euer Zug!');
 });
 
-// Kein Popup mehr: nur Sounds/Toasts
-
-// Feld gestartet → nur kurzer Hinweis
+// Feld gestartet → komplette Rundenansicht zeigen (kein Popup)
 socket.on('tile:revealed', p => {
-  showToast(`Feld gestartet: ${p.points} Punkte – Team ${p.turnTeam} beginnt`);
-  // Das eigentliche Ausblenden des Feldes passiert in renderBoard() nach state:update
+  showRoundView(p);
+  showToast(`Feld gestartet: ${p.points} Punkte – Team ${p.turnTeam} beginnt`, 2500);
 });
 
-// Korrekt / Falsch Sounds
-socket.on('answer:revealed', () => {
+// Antwort wurde (vom Admin) aufgedeckt → Slot füllen
+socket.on('answer:revealed', p => {
+  if (!activeRound || activeRound.ci!==p.catIndex || activeRound.ii!==p.itemIndex) return;
   document.getElementById('sfxCorrect').play().catch(()=>{});
+  const row = document.getElementById(`ans-${p.index}`);
+  if (!row) return;
+  row.classList.add('revealed');
+  row.firstChild.textContent = `${p.index+1}. ${p.text}`;
+  row.lastChild.textContent  = `${p.percent}%`;
 });
+
+// Falschantwort-Sound
 socket.on('guess:wrong', () => {
   document.getElementById('sfxWrong').play().catch(()=>{});
 });
 
-// Hinweis ans wartende Team: beraten
+// Hinweis ans wartende Team: beraten (non-blocking)
 socket.on('team:prepare', () => {
   showToast('Ihr dürft euch beraten! Gleich seid ihr am Zug.', 5000);
 });
 
-// Feld beendet → non-blocking Hinweis (Board aktualisiert sich via state:update)
+// Feld beendet → zurück zum Brett (Feld erscheint dort als „used“)
 socket.on('tile:closed', p => {
-  showToast(`Feld beendet – Punkte an Team ${p.winnerTeam}`);
+  hideRoundView();
+  showToast(`Feld beendet – Punkte an Team ${p.winnerTeam}`, 2500);
 });
 
 // Team-Chat
@@ -222,7 +278,6 @@ document.getElementById('chatBtn').onclick = () => {
   socket.emit('chat:team', { msg });
   chatIn.value = '';
 };
-
 socket.on('chat:team', m => {
   const row = el('div', {class:'player ' + (m.from.team==='A'?'teamA':'teamB')},
     el('div', {}, `${m.from.name}:`),
