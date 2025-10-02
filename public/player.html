@@ -1,77 +1,236 @@
-html
-const qtitle=document.getElementById('qtitle');
-const qtext=document.getElementById('qtext');
-const alist=document.getElementById('alist');
-document.getElementById('btnClose').onclick=()=> modal.classList.remove('show');
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spieler · 100 Leute gefragt</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1 class="h">Spieler-Panel</h1>
+    <div id="me" class="badge"></div>
+  </div>
 
+  <div class="card" style="margin-bottom:12px">
+    <div class="small">Beitritt</div>
+    <div class="controls">
+      <input id="inName" class="input" placeholder="Dein Name" />
+      <select id="inTeam" class="input">
+        <option value="A">Team Rot</option>
+        <option value="B">Team Blau</option>
+      </select>
+      <button class="btn ok" id="btnJoin">Beitreten</button>
+    </div>
+  </div>
 
-socket.on('tile:revealed', p=>{
-activeTile = { ci:p.catIndex, ii:p.itemIndex };
-qtitle.textContent=`${p.points} Punkte – Team ${p.turnTeam} beginnt`;
-qtext.textContent=p.question;
-// Antwortenliste (Platzhalter, leer bis reveal)
-alist.innerHTML='';
-const item = boardCache.categories[p.catIndex].items[p.itemIndex];
-item.answers.forEach((a,idx)=>{
-const row=el('div',{class:'answer-row'}, el('div',{}, `${idx+1}. —`), el('div',{}, `—%`));
-alist.appendChild(row);
-});
-modal.classList.add('show');
-});
+  <!-- Turn-Hinweis -->
+  <div id="turnBanner" class="notice" style="display:none; margin-bottom:12px;">
+    Teaminfo lädt…
+  </div>
 
+  <div class="row">
+    <div class="card" style="flex:2">
+      <h2 class="h">Brett</h2>
+      <div id="board" class="board"></div>
+      <div class="small" id="info">
+        Wähle ein Feld, wenn dein Team am Zug ist. <b>Antworten bitte mündlich auf Discord</b> – der Admin deckt die Lösungen auf.
+      </div>
+    </div>
 
-socket.on('answer:revealed', p=>{
-if(!activeTile || activeTile.ci!==p.catIndex || activeTile.ii!==p.itemIndex) return;
-document.getElementById('sfxCorrect').play().catch(()=>{});
-const rows = alist.querySelectorAll('.answer-row');
-const row = rows[p.index]; if(!row) return;
-row.classList.add('revealed');
-row.firstChild.textContent = `${p.index+1}. ${p.text}`;
-row.lastChild.textContent = `${p.percent}%`;
-});
+    <div class="card" style="flex:1">
+      <h2 class="h">Team</h2>
+      <div id="players" class="list"></div>
 
+      <h2 class="h" style="margin-top:10px">Team-Chat</h2>
+      <div id="chatLog" class="list" style="max-height:220px; overflow:auto"></div>
+      <div class="controls">
+        <input id="chatIn" class="input" placeholder="Nur dein Team sieht das (Admin sieht alles)" />
+        <button class="btn" id="chatBtn">Senden</button>
+      </div>
+    </div>
+  </div>
+</div>
 
-socket.on('guess:wrong', ()=> document.getElementById('sfxWrong').play().catch(()=>{}));
+<!-- Frage/Antworten Modal -->
+<div id="modal" class="modal"><div class="modal-card">
+  <h3 id="qtitle">Frage</h3>
+  <p id="qtext"></p>
+  <div id="alist" style="margin-top:10px"></div>
+  <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end">
+    <button class="btn" id="btnClose">Schließen</button>
+  </div>
+</div></div>
 
+<audio id="sfxCorrect" src="/sfx/correct.mp3" preload="auto"></audio>
+<audio id="sfxWrong"   src="/sfx/wrong.mp3"   preload="auto"></audio>
 
-socket.on('team:prepare', p=>{
-// Hinweis visuell
-const note=document.createElement('div'); note.className='notice';
-note.textContent = 'Ihr dürft euch beraten! Gleich seid ihr am Zug.';
-document.querySelector('.container').prepend(note);
-setTimeout(()=> note.remove(), 5000);
-});
+<script>
+const socket = io();
 
+let me = { id:null, name:null, team:null };
+let boardCache = null;
+let activeTile = null; // {ci, ii}
+let currentTurnTeam = null;
 
-socket.on('tile:closed', p=>{
-alert(`Feld beendet – Punkte an Team ${p.winnerTeam}`);
-modal.classList.remove('show');
-});
+function el(t, attrs={}, ...children){
+  const e=document.createElement(t);
+  Object.entries(attrs).forEach(([k,v])=> e.setAttribute(k,v));
+  children.forEach(c=> e.appendChild(typeof c==='string' ? document.createTextNode(c) : c));
+  return e;
+}
 
-
-// Guess senden
-const inGuess=document.getElementById('inGuess');
-document.getElementById('btnGuess').onclick=()=>{
-if(!activeTile) return alert('Kein aktives Feld.');
-const val = inGuess.value.trim(); if(!val) return;
-socket.emit('player:guess',{ catIndex:activeTile.ci, itemIndex:activeTile.ii, guess: val });
-inGuess.value='';
+// Join
+document.getElementById('btnJoin').onclick = () => {
+  const name = document.getElementById('inName').value.trim();
+  const team = document.getElementById('inTeam').value;
+  socket.emit('role:player');
+  socket.emit('player:join', { name, team });
 };
 
+socket.on('welcome', (p) => {
+  me = p;
+  document.getElementById('me').textContent = `${p.name} · Team ${p.team}`;
+});
+
+// Spieler-Liste
+function renderPlayers(players){
+  const wrap = document.getElementById('players');
+  wrap.innerHTML = '';
+  players.forEach(p=>{
+    const row = el('div', {class:'player ' + (p.team==='A'?'teamA':'teamB')},
+      el('div', {}, `${p.name} (Team ${p.team})`),
+      el('div', {}, `${p.score} P`)
+    );
+    wrap.appendChild(row);
+  });
+}
+
+// Brett
+const boardDiv = document.getElementById('board');
+function renderBoard(board){
+  boardCache = board;
+  boardDiv.innerHTML = '';
+  board.categories.forEach((cat, ci) => {
+    const col = el('div', {});
+    col.appendChild(el('div', {class:'cat'}, cat.name));
+    const tiles = el('div', {class:'tiles'});
+    cat.items.forEach((it, ii) => {
+      const used = it.revealed || it.answered;
+      const d = el('div', {class:'tile' + (used?' used':'')}, String(it.points));
+      d.onclick = () => {
+        if (used) return;
+        // Spieler darf Feld wählen; Antworten werden NICHT getippt, nur vom Admin aufgedeckt
+        socket.emit('player:pickTile', { catIndex:ci, itemIndex:ii });
+        activeTile = { ci:ci, ii:ii };
+      };
+      tiles.appendChild(d);
+    });
+    col.appendChild(tiles);
+    boardDiv.appendChild(col);
+  });
+}
+
+// Turn-Banner
+const turnBanner = document.getElementById('turnBanner');
+function updateTurnBanner(team, reason=''){
+  currentTurnTeam = team;
+  if (!team){ turnBanner.style.display='none'; return; }
+  turnBanner.style.display = 'block';
+  const name = team === 'A' ? 'Team Rot' : 'Team Blau';
+  turnBanner.textContent = `${name} ist am Zug. ${reason}`.trim();
+}
+
+// State-Updates
+socket.on('board:init', renderBoard);
+socket.on('state:update', data => {
+  renderBoard(data.board);
+  renderPlayers(data.players);
+});
+
+// Globaler Start-Zug (nach Auslosung)
+socket.on('turn:global', (p) => {
+  updateTurnBanner(p.team, 'Wählt ein Feld.');
+});
+
+// Turnover
+socket.on('turn:changed', (p) => {
+  const name = p.turnTeam === 'A' ? 'Team Rot' : 'Team Blau';
+  updateTurnBanner(p.turnTeam, 'Euer Zug!');
+});
+
+// Modal-Refs
+const modal = document.getElementById('modal');
+const qtitle = document.getElementById('qtitle');
+const qtext  = document.getElementById('qtext');
+const alist  = document.getElementById('alist');
+document.getElementById('btnClose').onclick = () => modal.classList.remove('show');
+
+// Frage aufdecken (bei Feldwahl)
+socket.on('tile:revealed', p => {
+  activeTile = { ci:p.catIndex, ii:p.itemIndex };
+  qtitle.textContent = `${p.points} Punkte – Team ${p.turnTeam} beginnt`;
+  qtext.textContent  = p.question;
+  // Antwortenliste (Platzhalter, leer bis reveal)
+  alist.innerHTML = '';
+  const item = boardCache.categories[p.catIndex].items[p.itemIndex];
+  item.answers.forEach((a, idx) => {
+    const row = el('div', {class:'answer-row'},
+      el('div', {}, `${idx+1}. —`),
+      el('div', {}, `—%`)
+    );
+    alist.appendChild(row);
+  });
+  modal.classList.add('show');
+});
+
+// Antwort wurde (vom Admin) aufgedeckt
+socket.on('answer:revealed', p => {
+  if (!activeTile || activeTile.ci!==p.catIndex || activeTile.ii!==p.itemIndex) return;
+  document.getElementById('sfxCorrect').play().catch(()=>{});
+  const rows = alist.querySelectorAll('.answer-row');
+  const row  = rows[p.index]; if (!row) return;
+  row.classList.add('revealed');
+  row.firstChild.textContent = `${p.index+1}. ${p.text}`;
+  row.lastChild.textContent  = `${p.percent}%`;
+});
+
+// Falschantwort-Sound (Info – die Falschantwort wird ja auf Discord gesagt)
+socket.on('guess:wrong', () => document.getElementById('sfxWrong').play().catch(()=>{}));
+
+// Hinweis ans wartende Team: beraten
+socket.on('team:prepare', () => {
+  const note = document.createElement('div');
+  note.className = 'notice';
+  note.textContent = 'Ihr dürft euch beraten! Gleich seid ihr am Zug.';
+  document.querySelector('.container').prepend(note);
+  setTimeout(()=> note.remove(), 5000);
+});
+
+// Feld beendet
+socket.on('tile:closed', p => {
+  alert(`Feld beendet – Punkte an Team ${p.winnerTeam}`);
+  modal.classList.remove('show');
+});
 
 // Team-Chat
-const chatLog=document.getElementById('chatLog');
-const chatIn=document.getElementById('chatIn');
-document.getElementById('chatBtn').onclick=()=>{
-const msg=chatIn.value.trim(); if(!msg) return;
-socket.emit('chat:team',{ msg });
-chatIn.value='';
+const chatLog = document.getElementById('chatLog');
+const chatIn  = document.getElementById('chatIn');
+document.getElementById('chatBtn').onclick = () => {
+  const msg = chatIn.value.trim(); if (!msg) return;
+  socket.emit('chat:team', { msg });
+  chatIn.value = '';
 };
 
-
-socket.on('chat:team', m=>{
-const row=el('div',{class:'player '+(m.from.team==='A'?'teamA':'teamB')}, el('div',{}, `${m.from.name}:`), el('div',{}, m.msg));
-chatLog.appendChild(row); chatLog.scrollTop = chatLog.scrollHeight;
+socket.on('chat:team', m => {
+  const row = el('div', {class:'player ' + (m.from.team==='A'?'teamA':'teamB')},
+    el('div', {}, `${m.from.name}:`),
+    el('div', {}, m.msg)
+  );
+  chatLog.appendChild(row);
+  chatLog.scrollTop = chatLog.scrollHeight;
 });
 </script>
 </body>
