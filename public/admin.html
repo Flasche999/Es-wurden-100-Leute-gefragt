@@ -45,8 +45,9 @@
   </div>
 </div>
 
-<audio id="sfxCorrect" src="/sfx/correct.mp3" preload="auto"></audio>
-<audio id="sfxWrong"   src="/sfx/wrong.mp3"   preload="auto"></audio>
+<!-- Audios: preload auf 'none' (Server liefert Fallback, falls MP3 fehlt) -->
+<audio id="sfxCorrect" src="/sfx/correct.mp3" preload="none"></audio>
+<audio id="sfxWrong"   src="/sfx/wrong.mp3"   preload="none"></audio>
 
 <script>
 const socket = io();
@@ -95,7 +96,7 @@ function renderBoard(board){
       d.onclick = () => {
         if (used) return;
         lastTile = { ci:ci, ii:ii };
-        socket.emit('player:pickTile', { catIndex:ci, itemIndex:ii }); // Admin darf ebenfalls öffnen
+        socket.emit('player:pickTile', { catIndex:ci, itemIndex:ii }); // Admin kann Feld öffnen
       };
       tiles.appendChild(d);
     });
@@ -104,7 +105,7 @@ function renderBoard(board){
   });
 }
 
-// *** NEU: Admin-Ansicht Antworten inkl. Meta, Fehlversuche, Badges, Reveal-All ***
+// Admin-Ansicht Antworten inkl. Meta, Fehlversuche, Badges, Reveal-All + Als-falsch-werten
 function renderAnswersAdmin(ci, ii, admBoard){
   adminBoardCache = admBoard;
   answersDiv.innerHTML = '';
@@ -112,9 +113,7 @@ function renderAnswersAdmin(ci, ii, admBoard){
   if (!item) return;
 
   // Kopfzeile mit Frage
-  answersDiv.appendChild(
-    el('div', {class:'small'}, `Frage: ${item.q}`)
-  );
+  answersDiv.appendChild(el('div', {class:'small'}, `Frage: ${item.q}`));
 
   // Meta-Zeile: Punkte, Am Zug, Original, Fehlversuche A/B
   const meta = el('div', {class:'player'},
@@ -127,9 +126,7 @@ function renderAnswersAdmin(ci, ii, admBoard){
         `Original: Team ${item.meta.originalTeam ?? '–'}`
       )
     ),
-    el('div', {},
-      `Fehlversuche A: ${item.meta.wrongA ?? 0}/3 · B: ${item.meta.wrongB ?? 0}/3`
-    )
+    el('div', {}, `Fehlversuche A: ${item.meta.wrongA ?? 0}/3 · B: ${item.meta.wrongB ?? 0}/3`)
   );
   answersDiv.appendChild(meta);
 
@@ -159,12 +156,20 @@ function renderAnswersAdmin(ci, ii, admBoard){
 
   // Footer-Controls
   const footer = el('div', {class:'controls', style:'margin-top:10px'});
+
+  // NEU: Falschantwort zählen (Team am Zug)
+  const wrongBtn = el('button', {class:'btn warn', id:'btnMarkWrong'}, 'Als falsch werten (Team am Zug)');
+  wrongBtn.onclick = () => socket.emit('admin:markWrong', { catIndex:ci, itemIndex:ii });
+
+  // Alle verbleibenden anzeigen
   const revealAllBtn = el('button', {class:'btn', id:'btnRevealAll'}, 'Alle verbleibenden anzeigen');
   revealAllBtn.onclick = () => {
     item.answers.forEach((a, idx) => {
       if (!a.revealed) socket.emit('admin:revealAnswer', { catIndex:ci, itemIndex:ii, index:idx });
     });
   };
+
+  footer.appendChild(wrongBtn);
   footer.appendChild(revealAllBtn);
   answersDiv.appendChild(footer);
 }
@@ -203,6 +208,15 @@ socket.on('answer:revealed', (p) => {
 
 socket.on('guess:wrong', () => {
   document.getElementById('sfxWrong').play().catch(()=>{});
+  // Der Server sendet danach state:admin → Fehlversuche/Turn werden aktualisiert
+});
+
+socket.on('turn:changed', (p) => {
+  // Optional: visuelles Feedback für Zugwechsel
+  if (lastTile && typeof p?.turnTeam !== 'undefined') {
+    // Sofort neu zeichnen, falls wir Cache haben
+    if (adminBoardCache) renderAnswersAdmin(lastTile.ci, lastTile.ii, adminBoardCache);
+  }
 });
 
 socket.on('chat:spy', (m) => {
