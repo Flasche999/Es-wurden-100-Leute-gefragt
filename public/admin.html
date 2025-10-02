@@ -1,0 +1,68 @@
+html
+function renderAnswersAdmin(ci,ii,admBoard){
+answersDiv.innerHTML='';
+const item = admBoard.categories[ci]?.items[ii];
+if(!item) return;
+answersDiv.appendChild(el('div',{class:'small'}, `Frage: ${item.q}`));
+item.answers.forEach((a,idx)=>{
+const row=el('div',{class:'answer-row '+(a.revealed?'revealed':'')},
+el('div',{}, `${idx+1}. ${a.text}`),
+el('div',{}, `${a.percent}%`)
+);
+if(!a.revealed){
+row.style.cursor = 'pointer';
+row.title = 'Antwort manuell aufdecken';
+row.onclick = ()=> socket.emit('admin:revealAnswer',{ catIndex:ci, itemIndex:ii, index:idx });
+}
+answersDiv.appendChild(row);
+});
+}
+
+
+socket.on('state:update', (data)=>{ renderPlayers(data.players); renderBoard(data.board); });
+
+
+socket.on('state:admin', (data)=>{
+renderPlayers(data.players); renderBoard(data.board);
+if (lastTile) renderAnswersAdmin(lastTile.ci,lastTile.ii,data.board);
+});
+
+
+socket.on('tile:revealed', (p)=>{
+lastTile = { ci:p.catIndex, ii:p.itemIndex };
+alert(`Team ${p.turnTeam} beginnt – ${p.points} Punkte\n\n${p.question}`);
+});
+
+
+socket.on('answer:revealed', ()=>{ document.getElementById('sfxCorrect').play().catch(()=>{}); });
+socket.on('guess:wrong', ()=>{ document.getElementById('sfxWrong').play().catch(()=>{}); });
+
+
+socket.on('chat:spy', (m)=>{
+const row=el('div',{class:'player '+(m.from.team==='A'?'teamA':'teamB')},
+el('div',{}, `[Team ${m.from.team}] ${m.from.name}:`),
+el('div',{}, m.msg)
+);
+spyDiv.appendChild(row);
+spyDiv.scrollTop = spyDiv.scrollHeight;
+});
+
+
+// Controls
+
+
+document.getElementById('btnDraw').onclick=()=> socket.emit('admin:drawStartTeam');
+document.getElementById('btnReload').onclick=()=> location.reload();
+document.getElementById('btnAward').onclick=()=>{
+const id=document.getElementById('awId').value.trim();
+const val=parseInt(document.getElementById('awVal').value||'0',10);
+if(!id) return alert('Spieler-ID angeben');
+socket.emit('admin:awardPoints',{ playerId:id, points:val });
+};
+document.getElementById('btnForce').onclick=()=>{
+if(!lastTile) return alert('Kein Feld aktiv');
+socket.emit('admin:forceClose',{ catIndex:lastTile.ci, itemIndex:lastTile.ii });
+};
+</script>
+</body>
+</html>

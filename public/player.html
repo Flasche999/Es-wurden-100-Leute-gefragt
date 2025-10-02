@@ -1,0 +1,78 @@
+html
+const qtitle=document.getElementById('qtitle');
+const qtext=document.getElementById('qtext');
+const alist=document.getElementById('alist');
+document.getElementById('btnClose').onclick=()=> modal.classList.remove('show');
+
+
+socket.on('tile:revealed', p=>{
+activeTile = { ci:p.catIndex, ii:p.itemIndex };
+qtitle.textContent=`${p.points} Punkte – Team ${p.turnTeam} beginnt`;
+qtext.textContent=p.question;
+// Antwortenliste (Platzhalter, leer bis reveal)
+alist.innerHTML='';
+const item = boardCache.categories[p.catIndex].items[p.itemIndex];
+item.answers.forEach((a,idx)=>{
+const row=el('div',{class:'answer-row'}, el('div',{}, `${idx+1}. —`), el('div',{}, `—%`));
+alist.appendChild(row);
+});
+modal.classList.add('show');
+});
+
+
+socket.on('answer:revealed', p=>{
+if(!activeTile || activeTile.ci!==p.catIndex || activeTile.ii!==p.itemIndex) return;
+document.getElementById('sfxCorrect').play().catch(()=>{});
+const rows = alist.querySelectorAll('.answer-row');
+const row = rows[p.index]; if(!row) return;
+row.classList.add('revealed');
+row.firstChild.textContent = `${p.index+1}. ${p.text}`;
+row.lastChild.textContent = `${p.percent}%`;
+});
+
+
+socket.on('guess:wrong', ()=> document.getElementById('sfxWrong').play().catch(()=>{}));
+
+
+socket.on('team:prepare', p=>{
+// Hinweis visuell
+const note=document.createElement('div'); note.className='notice';
+note.textContent = 'Ihr dürft euch beraten! Gleich seid ihr am Zug.';
+document.querySelector('.container').prepend(note);
+setTimeout(()=> note.remove(), 5000);
+});
+
+
+socket.on('tile:closed', p=>{
+alert(`Feld beendet – Punkte an Team ${p.winnerTeam}`);
+modal.classList.remove('show');
+});
+
+
+// Guess senden
+const inGuess=document.getElementById('inGuess');
+document.getElementById('btnGuess').onclick=()=>{
+if(!activeTile) return alert('Kein aktives Feld.');
+const val = inGuess.value.trim(); if(!val) return;
+socket.emit('player:guess',{ catIndex:activeTile.ci, itemIndex:activeTile.ii, guess: val });
+inGuess.value='';
+};
+
+
+// Team-Chat
+const chatLog=document.getElementById('chatLog');
+const chatIn=document.getElementById('chatIn');
+document.getElementById('chatBtn').onclick=()=>{
+const msg=chatIn.value.trim(); if(!msg) return;
+socket.emit('chat:team',{ msg });
+chatIn.value='';
+};
+
+
+socket.on('chat:team', m=>{
+const row=el('div',{class:'player '+(m.from.team==='A'?'teamA':'teamB')}, el('div',{}, `${m.from.name}:`), el('div',{}, m.msg));
+chatLog.appendChild(row); chatLog.scrollTop = chatLog.scrollHeight;
+});
+</script>
+</body>
+</html>
