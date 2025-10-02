@@ -6,6 +6,54 @@
   <title>Spieler · 100 Leute gefragt</title>
   <link rel="stylesheet" href="/style.css" />
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+  <!-- Kleinere Zusatz-Styles nur für die Spieler-Seite -->
+  <style>
+    /* Board für Nicht-Zug deaktivieren */
+    .board.disabled .tile{ pointer-events:none; filter:saturate(.7) opacity(.6); }
+
+    /* Celebration Overlay */
+    #celebrateOverlay{
+      position:fixed; inset:0; display:none; pointer-events:none;
+      background:rgba(5,7,12,.35);
+      z-index:9999;
+    }
+    #celebrateOverlay.show{ display:block; animation:fadeIn .2s ease; }
+    @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+    .cele-wrap{
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column;
+    }
+    .cele-text{
+      font-size:42px; font-weight:800; letter-spacing:.5px; text-align:center;
+      text-shadow:0 6px 24px rgba(0,0,0,.45);
+      margin-top:16px;
+    }
+    .cele-text small{ display:block; font-weight:600; opacity:.85; font-size:16px; margin-top:6px; }
+    .crown{
+      font-size:96px; line-height:1; filter:drop-shadow(0 8px 24px rgba(0,0,0,.4));
+      transform:translateY(0); animation:bounce 1.4s ease-in-out infinite;
+    }
+    @keyframes bounce{
+      0%,100%{ transform:translateY(0) }
+      50%{ transform:translateY(-8px) }
+    }
+
+    /* Confetti */
+    .confetti{
+      position:absolute; top:-10px; width:8px; height:14px; opacity:.9;
+      animation:fall linear forwards, spin ease-in-out infinite;
+      border-radius:2px;
+    }
+    @keyframes fall{
+      to{ transform:translateY(110vh) rotate(360deg); opacity:1; }
+    }
+    @keyframes spin{
+      0%{ transform:rotate(0deg) }
+      50%{ transform:rotate(180deg) }
+      100%{ transform:rotate(360deg) }
+    }
+  </style>
 </head>
 <body>
 <div class="container">
@@ -69,6 +117,16 @@
   </div>
 </div>
 
+<!-- Celebration Overlay -->
+<div id="celebrateOverlay" aria-hidden="true">
+  <div class="cele-wrap">
+    <div class="crown" id="celeCrown">👑</div>
+    <div class="cele-text" id="celeText">Team gewinnt!
+      <small>Tippe/Klicke zum Ausblenden</small>
+    </div>
+  </div>
+</div>
+
 <!-- Audios: auf 'none', Server liefert Fallback falls MP3 fehlt -->
 <audio id="sfxCorrect" src="/sfx/correct.mp3" preload="none"></audio>
 <audio id="sfxWrong"   src="/sfx/wrong.mp3"   preload="none"></audio>
@@ -96,6 +154,43 @@ function showToast(msg, ms=3500){
 }
 function show(id){ document.getElementById(id).classList.remove('hidden'); }
 function hide(id){ document.getElementById(id).classList.add('hidden'); }
+
+// Celebration helpers
+const overlay = document.getElementById('celebrateOverlay');
+const celeText = document.getElementById('celeText');
+function makeConfetti(team='A', count=120){
+  // remove old confetti
+  document.querySelectorAll('#celebrateOverlay .confetti').forEach(n=>n.remove());
+  const colors = team==='A'
+    ? ['#ff4d6d','#ffd166','#ff7aa2','#ffe08a']
+    : ['#4da3ff','#9be7ff','#a5f3fc','#c7d2fe'];
+  for(let i=0;i<count;i++){
+    const d = document.createElement('div');
+    d.className = 'confetti';
+    d.style.left = Math.random()*100 + 'vw';
+    d.style.background = colors[Math.floor(Math.random()*colors.length)];
+    const dur = 2.5 + Math.random()*2.5; // 2.5-5s
+    const delay = Math.random()*0.8;     // 0-0.8s
+    d.style.animationDuration = `${dur}s, ${0.6 + Math.random()*0.6}s`;
+    d.style.animationDelay = `${delay}s, 0s`;
+    d.style.transform = `translateY(-10px) rotate(${Math.random()*180}deg)`;
+    overlay.appendChild(d);
+  }
+}
+function celebrate(team){
+  const name = team==='A' ? 'Team Rot' : 'Team Blau';
+  celeText.innerHTML = `${name} gewinnt!<small>Tippe/Klicke zum Ausblenden</small>`;
+  document.getElementById('celeCrown').style.color = team==='A' ? 'var(--red)' : 'var(--blue)';
+  makeConfetti(team, 150);
+  overlay.classList.add('show');
+  // kleiner Soundfeedback
+  document.getElementById('sfxCorrect').play().catch(()=>{});
+  // auto hide nach 6.5s
+  clearTimeout(window.__cele_to);
+  window.__cele_to = setTimeout(()=> overlay.classList.remove('show'), 6500);
+}
+overlay.addEventListener('click', ()=> overlay.classList.remove('show'));
+overlay.addEventListener('touchstart', ()=> overlay.classList.remove('show'));
 
 // Join
 document.getElementById('btnJoin').onclick = () => {
@@ -186,11 +281,12 @@ function showRoundView(p){
   // p: { catIndex,itemIndex, question, points, turnTeam }
   activeRound = { ci:p.catIndex, ii:p.itemIndex, points:p.points, turnTeam:p.turnTeam, question:p.question };
 
-  roundMeta.textContent  = `Team ${p.turnTeam} beginnt • ${p.points} Punkte`;
+  // Hinweis: Label 1..5 statt Punktezahl
+  roundMeta.textContent  = `Am Zug: Team ${p.turnTeam} • Feld ${p.points}`;
   roundTitle.textContent = `Kategorie läuft`;
   roundQ.textContent     = p.question;
 
-  // 5 leere Slots bauen (unabhängig vom Board-Cache)
+  // 5 leere Slots bauen
   roundList.innerHTML = '';
   for (let i=0;i<5;i++){
     const row = el('div', {class:'answer-row', id:`ans-${i}`},
@@ -240,7 +336,7 @@ socket.on('turn:changed', (p) => {
 // Feld gestartet → komplette Rundenansicht zeigen (kein Popup)
 socket.on('tile:revealed', p => {
   showRoundView(p);
-  showToast(`Feld gestartet: ${p.points} Punkte – Team ${p.turnTeam} beginnt`, 2500);
+  showToast(`Feld gestartet: Feld ${p.points} – Team ${p.turnTeam} beginnt`, 2500);
 });
 
 // Antwort wurde (vom Admin) aufgedeckt → Slot füllen
@@ -267,7 +363,14 @@ socket.on('team:prepare', () => {
 // Feld beendet → zurück zum Brett (Feld erscheint dort als „used“)
 socket.on('tile:closed', p => {
   hideRoundView();
-  showToast(`Feld beendet – Punkte an Team ${p.winnerTeam}`, 2500);
+  const name = p.winnerTeam === 'A' ? 'Team Rot' : 'Team Blau';
+  showToast(`Feld beendet – Punkte an ${name}`, 2500);
+});
+
+// Gewinner-Animation (vom Admin ausgelöst)
+socket.on('celebrate:winner', ({ team }) => {
+  const t = (team === 'A' || team === 'B') ? team : 'A';
+  celebrate(t);
 });
 
 // Team-Chat
