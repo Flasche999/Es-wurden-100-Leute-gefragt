@@ -11,6 +11,7 @@
 // - Bonus: Startteam auslosen, Nächste Runde (Startteam wechseln), SFX-Fallback, Team-Chats.
 // - NEU: Admin-Event „admin:celebrate” → broadcast „celebrate:winner” (Konfetti/Krone bei allen Clients)
 // - NEU: Hintergrundmusik /music/bgm.mp3 mit Silent-Fallback (verhindert 416-Logs)
+// - NEU: Lock-in/Select-Sound /sfx/select.mp3 bei Feldwahl (Silent-Fallback)
 
 import express from 'express';
 import http from 'http';
@@ -50,6 +51,8 @@ function sendMediaOrSilent(subdir, name, res) {
 // Audio-Routen MÜSSEN vor express.static kommen:
 app.get("/sfx/correct.mp3", (_req, res) => sendMediaOrSilent("sfx",   "correct.mp3", res));
 app.get("/sfx/wrong.mp3",   (_req, res) => sendMediaOrSilent("sfx",   "wrong.mp3",   res));
+// NEU: Lock-in/Select-Sound bei Feldwahl
+app.get("/sfx/select.mp3",  (_req, res) => sendMediaOrSilent("sfx",   "select.mp3",  res));
 // NEU: Hintergrundmusik
 app.get("/music/bgm.mp3",   (_req, res) => sendMediaOrSilent("music", "bgm.mp3",     res));
 
