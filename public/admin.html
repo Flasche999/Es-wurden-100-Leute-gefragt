@@ -13,10 +13,13 @@
     <h1 class="h">Admin-Panel <span class="small">(alle Antworten sichtbar)</span></h1>
     <div class="controls">
       <button class="btn" id="btnDraw">Startteam auslosen</button>
-      <button class="btn" id="btnNextRound">Nächste Runde</button>
+      <button class="btn" id="btnNext">Nächste Runde</button>
       <button class="btn warn" id="btnReload">Fragen neu laden</button>
     </div>
   </div>
+
+  <!-- NEU: Zug-Banner -->
+  <div id="turnBanner" class="notice" style="display:none; margin-bottom:12px;">—</div>
 
   <div class="row">
     <!-- Linke Spalte: Spieler & Spy-Chat -->
@@ -54,8 +57,10 @@
 const socket = io();
 socket.emit('role:admin');
 
-let lastTile = null; // {ci, ii}
+let lastTile = null;           // {ci, ii}
 let adminBoardCache = null;
+let currentTurnTeam = null;    // 'A' | 'B' | null
+let lastPlayersCache = [];     // für Re-Highlight
 
 // Mini-Helper
 function el(t, attrs={}, ...children){
@@ -70,13 +75,36 @@ const playersDiv = document.getElementById('players');
 const boardDiv   = document.getElementById('board');
 const answersDiv = document.getElementById('answers');
 const spyDiv     = document.getElementById('spy');
+const turnBanner = document.getElementById('turnBanner');
 
-// Spieler rendern
+// NEU: Zug-UI aktualisieren (Banner + Body-Klasse + Player-Highlight)
+function updateTurnUI(team){
+  currentTurnTeam = (team === 'A' || team === 'B') ? team : null;
+
+  document.body.classList.remove('turnA','turnB');
+  if (currentTurnTeam){
+    document.body.classList.add(currentTurnTeam === 'A' ? 'turnA' : 'turnB');
+    turnBanner.style.display = 'block';
+    turnBanner.textContent = `Am Zug: ${currentTurnTeam === 'A' ? 'Team Rot' : 'Team Blau'}`;
+  } else {
+    turnBanner.style.display = 'none';
+  }
+
+  // Spieler-Re-Render, um aktives Team zu markieren
+  if (lastPlayersCache?.length) renderPlayers(lastPlayersCache);
+}
+
+// Spieler rendern (markiert Team am Zug)
 function renderPlayers(players){
+  lastPlayersCache = players || [];
   playersDiv.innerHTML = '';
-  players.forEach(p => {
-    const row = el('div', { class:'player ' + (p.team==='A' ? 'teamA' : 'teamB') },
-      el('div', {}, `${p.name} · Team ${p.team}`, el('span',{class:'badge'}, p.id.slice(0,6))),
+  lastPlayersCache.forEach(p => {
+    const cls = ['player', (p.team==='A' ? 'teamA' : 'teamB')];
+    if (currentTurnTeam && p.team === currentTurnTeam) cls.push('active');
+    const row = el('div', { class: cls.join(' ') },
+      el('div', {}, `${p.name} · Team ${p.team}`,
+        ...(currentTurnTeam && p.team===currentTurnTeam ? [el('span',{class:'team-pill', style:'margin-left:8px'}, 'Am Zug')] : [])
+      ),
       el('div', {}, `${p.score} Punkte`)
     );
     row.onclick = () => { document.getElementById('awId').value = p.id; };
@@ -173,12 +201,9 @@ function renderAnswersAdmin(ci, ii, admBoard){
   footer.appendChild(wrongBtn);
   footer.appendChild(revealAllBtn);
   answersDiv.appendChild(footer);
-
-  // Scroll zu Antwortenbereich
-  answersDiv.scrollIntoView({ behavior:'smooth', block:'start' });
 }
 
-// *** Socket Events ***
+// *** Events ***
 
 socket.on('state:update', (data) => {
   renderPlayers(data.players);
@@ -191,15 +216,21 @@ socket.on('state:admin', (data) => {
   if (lastTile) renderAnswersAdmin(lastTile.ci, lastTile.ii, data.board);
 });
 
+// Globaler Start-Zug & Zugwechsel → Admin-UI markieren
+socket.on('turn:global', (p) => {
+  updateTurnUI(p.team);
+});
+socket.on('turn:changed', (p) => {
+  updateTurnUI(p.turnTeam || p.team);
+  if (lastTile && adminBoardCache) {
+    renderAnswersAdmin(lastTile.ci, lastTile.ii, adminBoardCache);
+  }
+});
+
 socket.on('tile:revealed', (p) => {
   lastTile = { ci:p.catIndex, ii:p.itemIndex };
-  // Kein Blocking-Alert mehr – sofort Antworten-Panel zeigen (sobald Cache da ist)
-  if (adminBoardCache) {
-    renderAnswersAdmin(p.catIndex, p.itemIndex, adminBoardCache);
-  } else {
-    answersDiv.innerHTML = '';
-    answersDiv.appendChild(el('div', {class:'small'}, `Frage: ${p.question}`));
-  }
+  // Hinweis bleibt modal-frei, Admin weiß i. d. R. Bescheid:
+  // alert(`Team ${p.turnTeam} beginnt – ${p.points} Punkte\n\n${p.question}`);
 });
 
 // Sound + Live-Refresh der Antwortenzeile (ohne auf kompletten State zu warten)
@@ -219,12 +250,6 @@ socket.on('guess:wrong', () => {
   document.getElementById('sfxWrong').play().catch(()=>{});
 });
 
-socket.on('turn:changed', (p) => {
-  if (lastTile && typeof p?.turnTeam !== 'undefined') {
-    if (adminBoardCache) renderAnswersAdmin(lastTile.ci, lastTile.ii, adminBoardCache);
-  }
-});
-
 socket.on('chat:spy', (m) => {
   const row = el('div', {class:'player ' + (m.from.team==='A' ? 'teamA' : 'teamB')},
     el('div', {}, `[Team ${m.from.team}] ${m.from.name}:`),
@@ -235,16 +260,16 @@ socket.on('chat:spy', (m) => {
 });
 
 // *** Controls ***
-document.getElementById('btnDraw').onclick   = () => socket.emit('admin:drawStartTeam');
-document.getElementById('btnNextRound').onclick = () => socket.emit('admin:nextRound'); // NEU: Teamwechsel für die nächste Runde
-document.getElementById('btnReload').onclick = () => location.reload();
-document.getElementById('btnAward').onclick  = () => {
+document.getElementById('btnDraw').onclick  = () => socket.emit('admin:drawStartTeam');
+document.getElementById('btnNext').onclick  = () => socket.emit('admin:nextRound');
+document.getElementById('btnReload').onclick= () => location.reload();
+document.getElementById('btnAward').onclick = () => {
   const id  = document.getElementById('awId').value.trim();
   const val = parseInt(document.getElementById('awVal').value || '0', 10);
   if (!id) return alert('Spieler-ID angeben');
   socket.emit('admin:awardPoints', { playerId:id, points:val });
 };
-document.getElementById('btnForce').onclick  = () => {
+document.getElementById('btnForce').onclick = () => {
   if (!lastTile) return alert('Kein Feld aktiv');
   socket.emit('admin:forceClose', { catIndex:lastTile.ci, itemIndex:lastTile.ii });
 };
