@@ -14,6 +14,14 @@
     <div class="controls">
       <button class="btn" id="btnDraw">Startteam auslosen</button>
       <button class="btn" id="btnNext">Nächste Runde</button>
+
+      <!-- NEU: Gewinner-Anzeige (Konfetti/Krone bei allen Clients) -->
+      <select class="input" id="winTeam" style="min-width:auto">
+        <option value="A">Gewinner: Team Rot (A)</option>
+        <option value="B">Gewinner: Team Blau (B)</option>
+      </select>
+      <button class="btn ok" id="btnCelebrate">Gewinner-Team anzeigen</button>
+
       <button class="btn warn" id="btnReload">Fragen neu laden</button>
     </div>
   </div>
@@ -112,7 +120,7 @@ function renderPlayers(players){
   });
 }
 
-// Brett rendern
+// Brett rendern (zeigt 1..5 als Label)
 function renderBoard(board){
   boardDiv.innerHTML = '';
   board.categories.forEach((cat, ci) => {
@@ -142,18 +150,24 @@ function renderAnswersAdmin(ci, ii, admBoard){
   if (!item) return;
 
   // Kopfzeile mit Frage
-  answersDiv.appendChild(el('div', {class:'small'}, `Frage: ${item.q}`));
+  answersDiv.appendChild(el('div', {class:'small'}, `Feld ${item.points} · Frage: ${item.q}`));
 
-  // Meta-Zeile: Punkte, Am Zug, Original, Fehlversuche A/B
+  // Meta-Zeile: Am Zug, Original, Fehlversuche A/B, Steal-Status
+  const stealInfo = item.meta.stealActive
+    ? ` · Abstauber: Team ${item.meta.stealTeam ?? '–'} (1 Chance)`
+    : '';
   const meta = el('div', {class:'player'},
     el('div', {},
-      `Punkte: ${item.points} `,
       el('span', {class: 'team-pill ' + (item.meta.turnTeam==='A' ? 'teamA' : 'teamB')},
         `Am Zug: Team ${item.meta.turnTeam ?? '–'}`
       ),
       el('span', {class: 'team-pill', style: 'margin-left:8px'},
         `Original: Team ${item.meta.originalTeam ?? '–'}`
-      )
+      ),
+      el('span', {class: 'team-pill', style: 'margin-left:8px'},
+        item.meta.stealActive ? 'Abstauber aktiv' : 'Normalphase'
+      ),
+      document.createTextNode(stealInfo)
     ),
     el('div', {}, `Fehlversuche A: ${item.meta.wrongA ?? 0}/3 · B: ${item.meta.wrongB ?? 0}/3`)
   );
@@ -229,8 +243,7 @@ socket.on('turn:changed', (p) => {
 
 socket.on('tile:revealed', (p) => {
   lastTile = { ci:p.catIndex, ii:p.itemIndex };
-  // Hinweis bleibt modal-frei, Admin weiß i. d. R. Bescheid:
-  // alert(`Team ${p.turnTeam} beginnt – ${p.points} Punkte\n\n${p.question}`);
+  // kein Blocking-Alert nötig
 });
 
 // Sound + Live-Refresh der Antwortenzeile (ohne auf kompletten State zu warten)
@@ -259,6 +272,15 @@ socket.on('chat:spy', (m) => {
   spyDiv.scrollTop = spyDiv.scrollHeight;
 });
 
+// Optional: Bestätigung wenn die Gewinner-Animation ausgelöst wurde
+socket.on('celebrate:winner', ({ team }) => {
+  const who = team === 'A' ? 'Team Rot' : 'Team Blau';
+  // kurzer visueller Hinweis oben
+  turnBanner.style.display = 'block';
+  turnBanner.textContent = `🎉 Gewinner-Animation ausgelöst für ${who}`;
+  setTimeout(()=> updateTurnUI(currentTurnTeam), 3000);
+});
+
 // *** Controls ***
 document.getElementById('btnDraw').onclick  = () => socket.emit('admin:drawStartTeam');
 document.getElementById('btnNext').onclick  = () => socket.emit('admin:nextRound');
@@ -272,6 +294,13 @@ document.getElementById('btnAward').onclick = () => {
 document.getElementById('btnForce').onclick = () => {
   if (!lastTile) return alert('Kein Feld aktiv');
   socket.emit('admin:forceClose', { catIndex:lastTile.ci, itemIndex:lastTile.ii });
+};
+
+// NEU: Gewinner-Team anzeigen (Konfetti/Krone bei allen)
+document.getElementById('btnCelebrate').onclick = () => {
+  const t = document.getElementById('winTeam').value;
+  if (t !== 'A' && t !== 'B') return;
+  socket.emit('admin:celebrate', { team: t });
 };
 </script>
 </body>
