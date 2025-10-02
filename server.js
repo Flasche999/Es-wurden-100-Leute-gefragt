@@ -1,4 +1,4 @@
-// server.js – Quiz "100 Leute gefragt" – Team-Style (Neustart v1.1)
+// server.js – Quiz "100 Leute gefragt" – Team-Style (Neustart v1.2)
 // Features:
 // - 5 Kategorien × 5 Felder (10–50 Punkte), pro Feld 5 Antworten mit Prozenten (Top→Bottom)
 // - Teams: Rot (A) & Blau (B)
@@ -10,6 +10,8 @@
 // - Admin: Antworten manuell aufdecken, Feld schließen, Punkte vergeben,
 //          „Als falsch werten“, „Nächste Runde“ (Teamwechsel)
 // - Sounds: correct/wrong Broadcast-Events (+ Fallback, falls MP3s fehlen)
+// - FIX: Nach Turnover bekommt das aktuell ratende Team die Punkte, wenn es die letzten
+//        Antworten vollständig errät (auch bei manuellem Aufdecken durch den Admin).
 
 import express from 'express';
 import http from 'http';
@@ -205,7 +207,7 @@ io.on('connection', socket => {
     io.emit('turn:global', { team:start });
   });
 
-  // NEU: Nächste Runde (Admin) – wechselt Startteam und broadcastet neuen globalen Zug
+  // Nächste Runde (Admin) – wechselt Startteam und broadcastet neuen globalen Zug
   socket.on('admin:nextRound', () => {
     const curr = state.turnTeam || 'A';
     const next = curr === 'A' ? 'B' : 'A';
@@ -286,15 +288,24 @@ io.on('connection', socket => {
     emitState();
   });
 
-  // Admin: Antwort manuell aufdecken
+  // Admin: Antwort manuell aufdecken (→ zählt dem aktuell ratenden Team)
   socket.on('admin:revealAnswer', ({ catIndex,itemIndex, index }) => {
     const item = state.board.categories[catIndex]?.items[itemIndex]; if (!item) return;
     const a = item.answers[index]; if (!a || a.revealed) return;
-    a.revealed = true; a.byTeam = null; // manuell
-    io.emit('answer:revealed', { catIndex,itemIndex, index, text:a.text, percent:a.percent, byTeam:null });
+
+    // FIX: Attribution an das Team, das JETZT am Zug ist (auch nach Turnover)
+    const currentTeam = item.meta.turnTeam || state.turnTeam || null;
+
+    a.revealed = true;
+    a.byTeam   = currentTeam; // wichtig für Punkte & Top-Antwort-Entscheidungen
+    io.emit('answer:revealed', { catIndex,itemIndex, index, text:a.text, percent:a.percent, byTeam: currentTeam });
+
     if (allFound(item)){
-      awardTeamPoints(item.meta.originalTeam || 'A', item.points);
-      closeField(catIndex,itemIndex,(item.meta.originalTeam||'A'),'admin-full-reveal');
+      // Gewinnerpräferenz: (1) Team, das die letzte korrekte Antwort hatte,
+      // (2) aktuelles Zug-Team, (3) Originalteam
+      const winner = a.byTeam || currentTeam || item.meta.originalTeam || 'A';
+      awardTeamPoints(winner, item.points);
+      closeField(catIndex,itemIndex,winner,'admin-full-reveal');
     } else {
       emitState();
     }
