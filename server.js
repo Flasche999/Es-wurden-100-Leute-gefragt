@@ -1,17 +1,25 @@
-// server.js – Quiz "100 Leute gefragt" – Team-Style (v2.2 – neues Punktesystem + Gewinner-Animation + Hintergrundmusik)
+// server.js – Quiz "100 Leute gefragt" – Team-Style (v2.3 – Admin-Rejoin + Snapshot + optionale Persistenz)
 // NEUES PUNKTESYSTEM & TILE-LABELS:
 // - Kacheln zeigen nur noch 1..5 (kein 10/20/30/40/50).
 // - Punkte = SUMME der aufgedeckten Prozente.
 //   • Start-Team löst ALLE Antworten → bekommt GESAMTSUMME (i. d. R. 100).
 //   • Start-Team macht 3 Fehler → Abstauber-Phase startet:
 //       - Abstauber-Team hat GENAU 1 Chance:
-//           · Richtig → Abstauber-Team bekommt die BIS DAHIN aufgedeckte Prozentsumme.
-//           · Falsch  → Start-Team bekommt die BIS DAHIN aufgedeckte Prozentsumme.
+//           · Richtig  → Abstauber-Team bekommt die BIS DAHIN aufgedeckte Prozentsumme.
+//           · Falsch   → Start-Team bekommt die BIS DAHIN aufgedeckte Prozentsumme.
 // - Admin deckt Antworten manuell auf (oder optional per Tipp-Eingabe).
 // - Bonus: Startteam auslosen, Nächste Runde (Startteam wechseln), SFX-Fallback, Team-Chats.
-// - NEU: Admin-Event „admin:celebrate” → broadcast „celebrate:winner” (Konfetti/Krone bei allen Clients)
-// - NEU: Hintergrundmusik /music/bgm.mp3 mit Silent-Fallback (verhindert 416-Logs)
-// - NEU: Lock-in/Select-Sound /sfx/select.mp3 bei Feldwahl (Silent-Fallback)
+// - Admin-Event „admin:celebrate” → broadcast „celebrate:winner” (Konfetti/Krone bei allen Clients)
+// - Hintergrundmusik /music/bgm.mp3 mit Silent-Fallback (verhindert 416-Logs)
+// - Lock-in/Select-Sound /sfx/select.mp3 bei Feldwahl (Silent-Fallback)
+// ──────────────────────────────────────────────────────────────────────────────
+// NEU (v2.3):
+// - „Server als Source of Truth“ + Admin-Rejoin/Snapshot:
+//     · admin:join { sessionId } → Server schickt admin:snapshot (kompletter Spielstand)
+//     · role:admin liefert ebenfalls state:admin (wie bisher), admin:join ist robust für Reconnect-Flows
+// - Optionale Persistenz: Spielstand wird alle 10s in ./state.json gespeichert und beim Start geladen
+//   (Spieler-Sockets werden natürlich nicht „wiederbelebt“, aber Fragen/Fortschritt bleiben erhalten)
+// ──────────────────────────────────────────────────────────────────────────────
 
 import express from 'express';
 import http from 'http';
@@ -51,9 +59,9 @@ function sendMediaOrSilent(subdir, name, res) {
 // Audio-Routen MÜSSEN vor express.static kommen:
 app.get("/sfx/correct.mp3", (_req, res) => sendMediaOrSilent("sfx",   "correct.mp3", res));
 app.get("/sfx/wrong.mp3",   (_req, res) => sendMediaOrSilent("sfx",   "wrong.mp3",   res));
-// NEU: Lock-in/Select-Sound bei Feldwahl
+// Lock-in/Select-Sound bei Feldwahl
 app.get("/sfx/select.mp3",  (_req, res) => sendMediaOrSilent("sfx",   "select.mp3",  res));
-// NEU: Hintergrundmusik
+// Hintergrundmusik
 app.get("/music/bgm.mp3",   (_req, res) => sendMediaOrSilent("music", "bgm.mp3",     res));
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -99,17 +107,61 @@ function loadData(){
   return raw;
 }
 
+// Falls Persistenz-Datei existiert, versuchen wir später daraus zu laden:
 let db = loadData();
 
 // ─────────────────────────────────────────────────────────────
-// Globaler State
+// Globaler State (Server = Source of Truth)
 // ─────────────────────────────────────────────────────────────
 const state = {
   players: {},            // socketId -> { id,name,team:'A'|'B', score }
-  board: db,              // Daten aus fragen.json
+  board: db,              // Daten aus fragen.json (wird modifiziert)
   activePlayer: null,     // optional
-  turnTeam: null          // globaler Start-Zug, pro Feld in item.meta.turnTeam
+  turnTeam: null,         // globaler Start-Zug, pro Feld in item.meta.turnTeam
+  adminSessions: new Set()// registrierte Admin-Session-IDs (Info-Zweck)
 };
+
+// ─────────────────────────────────────────────────────────────
+// Persistenz: State auf Disk speichern / laden (optional, aktiv)
+// ─────────────────────────────────────────────────────────────
+const STATE_PATH = path.join(__dirname, 'state.json');
+
+function dumpStateToDisk(){
+  try {
+    const serializable = {
+      board: state.board,
+      turnTeam: state.turnTeam,
+      // Spieler-Sockets nicht persistieren (Sessions enden bei Server-Restart):
+      players: {}, // leer; Scores liegen pro Spieler, nicht Team – hier lassen wir leer
+      activePlayer: null
+    };
+    fs.writeFileSync(STATE_PATH, JSON.stringify(serializable, null, 2));
+  } catch(e){
+    console.warn('State speichern fehlgeschlagen:', e.message);
+  }
+}
+
+function loadStateFromDisk(){
+  try {
+    if (!fs.existsSync(STATE_PATH)) return false;
+    const raw = JSON.parse(fs.readFileSync(STATE_PATH,'utf8'));
+    if (raw && raw.board){
+      state.board    = raw.board;
+      state.turnTeam = raw.turnTeam ?? null;
+      // players bleiben leer; activePlayer nicht wiederherstellen
+      console.log('State aus state.json wiederhergestellt.');
+      return true;
+    }
+  } catch(e){
+    console.warn('State laden fehlgeschlagen:', e.message);
+  }
+  return false;
+}
+
+// Beim Start versuchen zu laden:
+loadStateFromDisk();
+// Alle 10 Sekunden sichern:
+setInterval(dumpStateToDisk, 10000);
 
 // ─────────────────────────────────────────────────────────────
 // Helper
@@ -135,9 +187,12 @@ function adminBoard(){ return state.board; }
 function playersList(){
   return Object.values(state.players).map(p=>({ id:p.id, name:p.name, team:p.team, score:p.score }));
 }
+function makeAdminSnapshot(){
+  return { board: adminBoard(), players: playersList(), activePlayer: state.activePlayer, turnTeam: state.turnTeam };
+}
 function emitState(){
   io.emit('state:update', { board: publicBoard(), players: playersList(), activePlayer: state.activePlayer });
-  io.to('admins').emit('state:admin', { board: adminBoard(), players: playersList(), activePlayer: state.activePlayer });
+  io.to('admins').emit('state:admin', makeAdminSnapshot());
 }
 function otherTeam(t){ return t==='A' ? 'B' : 'A'; }
 function sanitize(s){ return String(s||'').trim().toLowerCase(); }
@@ -212,14 +267,33 @@ function closeField(catIndex,itemIndex,winnerTeam,reason, pointsAwarded=null){
 // Socket.IO
 // ─────────────────────────────────────────────────────────────
 io.on('connection', socket => {
-  // Rollen
+  // ── Admin-Rollen/Join/Rejoin (NEU: admin:join → admin:snapshot) ─────────────
   socket.on('role:admin', () => {
     socket.join('admins');
-    socket.emit('state:admin', { board: adminBoard(), players: playersList(), activePlayer: state.activePlayer });
+    socket.data.role = 'admin';
+    socket.emit('state:admin', makeAdminSnapshot());
+    // Optional: Spielern signalisieren, dass ein Admin online ist
+    socket.to().emit?.('admin:status', { online: true });
   });
-  socket.on('role:player', () => { /* noop */ });
 
-  // Spieler beitreten
+  socket.on('admin:join', ({ sessionId }) => {
+    // sessionId dient nur zur Info/Protokoll; keine Auth hier
+    socket.join('admins');
+    socket.data.role = 'admin';
+    if (sessionId) {
+      socket.data.adminSessionId = String(sessionId);
+      state.adminSessions.add(String(sessionId));
+    }
+    // Immer vollständigen Snapshot schicken:
+    socket.emit('admin:snapshot', makeAdminSnapshot());
+    // Optional Broadcast (Spieler sehen Admin-Status)
+    socket.broadcast.emit('admin:status', { online: true });
+  });
+
+  // ── Spieler-Rolle ──────────────────────────────────────────
+  socket.on('role:player', () => { socket.data.role = 'player'; });
+
+  // ── Spieler beitreten ─────────────────────────────────────
   socket.on('player:join', ({ name, team }) => {
     const clean = String(name||'').trim().slice(0,24) || 'Spieler';
     const t = (team === 'B') ? 'B' : 'A';
@@ -230,7 +304,7 @@ io.on('connection', socket => {
     emitState();
   });
 
-  // Team-Chat
+  // ── Team-Chat ─────────────────────────────────────────────
   socket.on('chat:team', ({ msg }) => {
     const p = state.players[socket.id]; if (!p) return;
     const payload = { from:{ id:p.id, name:p.name, team:p.team }, msg:String(msg||'').slice(0,400), ts:Date.now() };
@@ -238,28 +312,29 @@ io.on('connection', socket => {
     io.to('admins').emit('chat:spy', payload);
   });
 
-  // Startteam auslosen (Admin)
+  // ── Startteam auslosen / Nächste Runde ────────────────────
   socket.on('admin:drawStartTeam', () => {
     const start = Math.random() < 0.5 ? 'A' : 'B';
     state.turnTeam = start;
     io.emit('turn:global', { team:start });
+    emitState();
   });
 
-  // Nächste Runde (Admin)
   socket.on('admin:nextRound', () => {
     const curr = state.turnTeam || 'A';
     const next = curr === 'A' ? 'B' : 'A';
     state.turnTeam = next;
     io.emit('turn:global', { team: next });
+    emitState();
   });
 
-  // Gewinner-Animation (Admin → Alle)
+  // ── Gewinner-Animation (Admin → Alle) ────────────────────
   socket.on('admin:celebrate', ({ team }) => {
     if (team !== 'A' && team !== 'B') return;
     io.emit('celebrate:winner', { team, ts: Date.now() });
   });
 
-  // Feld wählen (nur Team am Zug)
+  // ── Feld wählen (nur Team am Zug) ────────────────────────
   socket.on('player:pickTile', ({ catIndex, itemIndex }) => {
     const p = state.players[socket.id]; if (!p) return;
     const cat = state.board.categories[catIndex]; if (!cat) return;
@@ -280,7 +355,7 @@ io.on('connection', socket => {
     emitState();
   });
 
-  // Optional: Tipp-Antworten (Standard bleibt: Admin deckt auf)
+  // ── Optional: Tipp-Antworten (Normal/Steal) ───────────────
   socket.on('player:guess', ({ catIndex, itemIndex, guess }) => {
     const p = state.players[socket.id]; if (!p) return;
     const cat = state.board.categories[catIndex]; if (!cat) return;
@@ -343,7 +418,7 @@ io.on('connection', socket => {
     emitState();
   });
 
-  // Admin: Antwort manuell aufdecken
+  // ── Admin: Antwort manuell aufdecken ─────────────────────
   socket.on('admin:revealAnswer', ({ catIndex,itemIndex, index }) => {
     const item = state.board.categories[catIndex]?.items[itemIndex]; if (!item) return;
     if (item.answered) return; // Schutz
@@ -376,7 +451,7 @@ io.on('connection', socket => {
     }
   });
 
-  // Admin – als falsch werten
+  // ── Admin – als falsch werten ────────────────────────────
   socket.on('admin:markWrong', ({ catIndex, itemIndex }) => {
     const cat  = state.board.categories[catIndex]; if (!cat) return;
     const item = cat.items[itemIndex];              if (!item || !item.revealed || item.answered) return;
@@ -407,7 +482,7 @@ io.on('connection', socket => {
     emitState();
   });
 
-  // Admin: Feld schließen (Zeit abgelaufen etc.)
+  // ── Admin: Feld schließen (Zeit abgelaufen etc.) ─────────
   socket.on('admin:forceClose', ({ catIndex,itemIndex }) => {
     const item = state.board.categories[catIndex]?.items[itemIndex]; if (!item) return;
     if (item.answered) return;
@@ -422,7 +497,7 @@ io.on('connection', socket => {
     closeField(catIndex,itemIndex,winner,'force-close', pts);
   });
 
-  // Admin: Punkte direkt an Spieler
+  // ── Admin: Punkte direkt an Spieler ──────────────────────
   socket.on('admin:awardPoints', ({ playerId, points }) => {
     const p = state.players[playerId]; if (!p) return;
     const val = Number(points)||0;
@@ -431,16 +506,24 @@ io.on('connection', socket => {
     emitState();
   });
 
-  // Disconnect
+  // ── Disconnect ───────────────────────────────────────────
   socket.on('disconnect', () => {
-    delete state.players[socket.id];
-    if (state.activePlayer === socket.id) state.activePlayer = null;
-    emitState();
+    // Nur echte Spieler aus state.players entfernen; Admins werden dort nicht geführt
+    if (state.players[socket.id]) {
+      delete state.players[socket.id];
+      if (state.activePlayer === socket.id) state.activePlayer = null;
+      emitState();
+    }
+    // Admin-Status aktualisieren (optional)
+    if (socket.data?.role === 'admin') {
+      if (socket.data.adminSessionId) state.adminSessions.delete(socket.data.adminSessionId);
+      socket.broadcast.emit('admin:status', { online: false });
+    }
   });
 });
 
 // Optional: 416 sauber schlucken (falls doch irgendwo auftritt)
-app.use((err, req, res, next) => {
+app.use((err, _req, res, next) => {
   if (err && (err.status === 416 || err.statusCode === 416)) {
     return res.status(204).end();
   }
