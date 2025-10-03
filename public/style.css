@@ -362,3 +362,42 @@ a{ color:inherit; }
   0%{ transform:scale(.8); opacity:0; }
   100%{ transform:scale(1); opacity:1; }
 }
+
+/* ---------- NEW: Team-Strikes (Kreuze) – für Admin & Spieler ---------- */
+.strikesWrap{
+  display:grid; grid-template-columns:1fr 1fr; gap:10px;
+  margin:6px 0 12px 0;
+}
+.teamStrikes{
+  padding:8px; border:1px solid var(--ring); border-radius:12px; background:rgba(11,15,25,.55);
+}
+.teamStrikes .label{
+  font-size:12px; opacity:.85; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;
+}
+.teamStrikes.teamA .label strong{ color:var(--red); }
+.teamStrikes.teamB .label strong{ color:var(--blue); }
+
+.strikes{
+  display:flex; gap:8px; align-items:center; justify-content:center;
+}
+.strike{
+  width:18px; height:18px; opacity:.35;
+  border:1px solid var(--ring); border-radius:6px;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow: var(--shadow-lg);
+  transition: transform .15s ease, opacity .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.strike svg{ width:14px; height:14px; opacity:0; }
+
+/* Aktive Kreuze mit Teamfarbe und Glow */
+.teamStrikes.teamA .strike.active{
+  opacity:1; border-color: rgba(255,77,109,.6);
+  box-shadow: 0 0 14px rgba(255,77,109,.35);
+  transform: translateY(-1px);
+}
+.teamStrikes.teamB .strike.active{
+  opacity:1; border-color: rgba(77,163,255,.6);
+  box-shadow: 0 0 14px rgba(77,163,255,.35);
+  transform: translateY(-1px);
+}
+.strike.active svg{ opacity:1; }
