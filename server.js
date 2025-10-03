@@ -23,6 +23,10 @@
 // NEU (Strikes/Kreuze unter Teamnamen):
 // - Server broadcastet `strikes:update` mit { A, B } = 0..3
 // - Reset bei neuem Feld, Rundenwechsel, Feldschluss, Steal-Ende
+// ──────────────────────────────────────────────────────────────────────────────
+// NEU (Sound-Reihenfolge bei "falsch"):
+// - Beim falschen Versuch in der normalen Phase: ZUERST Kreuze updaten (strikes:update),
+//   DANN Sound via guess:wrong (Clients spielen /sfx/wrong.mp3). → sichtbares Kreuz vor Ton.
 
 import express from 'express';
 import http from 'http';
@@ -441,6 +445,7 @@ io.on('connection', socket => {
         io.emit('answer:revealed', { catIndex,itemIndex, index:idx, text:item.answers[idx].text, percent:item.answers[idx].percent, byTeam:p.team });
         endStealWithResult(catIndex,itemIndex,item,true);
       } else {
+        // In Steal-Phase lassen wir den Sound direkt laufen:
         io.emit('sfx:wrong');
         endStealWithResult(catIndex,itemIndex,item,false);
       }
@@ -468,15 +473,15 @@ io.on('connection', socket => {
       return;
     }
 
-    // falsch in normaler Phase
-    io.emit('sfx:wrong');
+    // ── FALSCH in normaler Phase → REIHENFOLGE: Strikes zuerst, dann Ton
     if (item.meta.turnTeam === 'A') item.meta.wrongA++; else item.meta.wrongB++;
     const wrongs = (item.meta.turnTeam === 'A') ? item.meta.wrongA : item.meta.wrongB;
 
-    io.emit('guess:wrong', { catIndex,itemIndex, team:item.meta.turnTeam, wrongs });
-
-    // NEU: Strikes broadcasten
+    // 1) Erst Kreuze updaten (sichtbar)
     broadcastStrikesFromItem(item);
+
+    // 2) Dann Wrong-Sound via guess:wrong (Clients spielen /sfx/wrong.mp3 ab)
+    io.emit('guess:wrong', { catIndex,itemIndex, team:item.meta.turnTeam, wrongs });
 
     if (wrongs === 2){
       const next = otherTeam(item.meta.turnTeam);
@@ -536,6 +541,7 @@ io.on('connection', socket => {
 
     if (item.meta.stealActive){
       // In Steal-Phase: falsche Antwort → Punkte an Originalteam (bis dahin aufgedeckte Summe)
+      // (Hier lassen wir den Sound direkt laufen.)
       io.emit('sfx:wrong');
       endStealWithResult(catIndex,itemIndex,item,false);
       return;
@@ -543,14 +549,16 @@ io.on('connection', socket => {
 
     // Normale Phase: Fehlversuche zählen
     const team = item.meta.turnTeam || state.turnTeam || item.meta.originalTeam || 'A';
-    io.emit('sfx:wrong');
 
     if (team === 'A') item.meta.wrongA++; else item.meta.wrongB++;
     const wrongs = (team === 'A') ? item.meta.wrongA : item.meta.wrongB;
-    io.emit('guess:wrong', { catIndex, itemIndex, team, wrongs });
 
-    // NEU: Strikes broadcasten
+    // *** NEU: Reihenfolge ***
+    // 1) Erst Kreuze/Strikes sichtbar updaten
     broadcastStrikesFromItem(item);
+
+    // 2) Dann Wrong-Sound via guess:wrong (Clients spielen /sfx/wrong.mp3)
+    io.emit('guess:wrong', { catIndex, itemIndex, team, wrongs });
 
     if (wrongs === 2){
       const next = otherTeam(team);
