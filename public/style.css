@@ -163,6 +163,16 @@ a{ color:inherit; }
 .teamA{ color:var(--red); }
 .teamB{ color:var(--blue); }
 
+/* Ergänzung: farbige Team-Pills (wie im Admin-HTML genutzt) */
+.team-pill.teamA{
+  background:rgba(255,77,109,.12);
+  border-color:rgba(255,77,109,.35);
+}
+.team-pill.teamB{
+  background:rgba(77,163,255,.12);
+  border-color:rgba(77,163,255,.35);
+}
+
 /* ---------- Notice / Banner ---------- */
 .notice{
   padding:10px;
@@ -240,9 +250,10 @@ a{ color:inherit; }
   transition:background .12s ease, border .12s ease, transform .08s ease;
 }
 .answer-row:not(.revealed):hover{ border-color:#2a4b7a; transform:translateY(-1px); }
+/* beim Reveal leicht positiv einfärben */
 .answer-row.revealed{
-  background:#0f1a2e;
-  border-color:#2a3b66;
+  background:rgba(33,197,93,.08);
+  border-color:rgba(33,197,93,.35);
   box-shadow:inset 0 0 0 1px #1e2b48;
 }
 
@@ -314,3 +325,40 @@ a{ color:inherit; }
 
 .turnA .player.teamB{ opacity:.6; }
 .turnB .player.teamA{ opacity:.6; }
+
+/* ---------- NEW: Mini-Musik-Controls (Floating) ---------- */
+#musicCtl{
+  position:fixed; right:14px; bottom:14px; z-index:9000;
+  display:flex; align-items:center; gap:8px; padding:8px 10px;
+  background:rgba(10,16,32,.7);
+  border:1px solid #22345a;
+  border-radius:12px;
+  backdrop-filter:blur(3px) saturate(1.1);
+  box-shadow:var(--shadow-lg);
+}
+#musicCtl .btn{ min-width:100px; }
+#bgmVol{ width:140px; accent-color:var(--aqua); }
+
+/* ---------- NEW: Winner-Overlay (Konfetti + Krone) ---------- */
+#celebrateWrap{
+  position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+  pointer-events:none; z-index:9999;
+}
+#celebrateWrap.show{ display:flex; }
+#celebrateCanvas{ position:absolute; inset:0; width:100%; height:100%; }
+.crownWrap{
+  position:relative; display:flex; flex-direction:column; align-items:center; gap:6px;
+  background:rgba(5,7,12,.25); border:1px solid rgba(255,255,255,.12);
+  padding:14px 18px; border-radius:16px; backdrop-filter:blur(4px) saturate(1.1);
+  animation:popIn .5s ease-out;
+  box-shadow:var(--shadow-lg);
+}
+.crown{ font-size:64px; line-height:1; filter:drop-shadow(0 6px 14px rgba(0,0,0,.35)); }
+.winText{ font-weight:800; letter-spacing:.3px; }
+.winA{ color:var(--red); text-shadow:0 0 24px rgba(255,77,109,.45); }
+.winB{ color:var(--blue); text-shadow:0 0 24px rgba(77,163,255,.45); }
+
+@keyframes popIn{
+  0%{ transform:scale(.8); opacity:0; }
+  100%{ transform:scale(1); opacity:1; }
+}
