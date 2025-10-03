@@ -18,7 +18,8 @@
       background:rgba(5,7,12,.35);
       z-index:9999;
     }
-    #celebrateOverlay.show{ display:block; animation:fadeIn .2s ease; }
+    /* klickbar machen, wenn sichtbar */
+    #celebrateOverlay.show{ display:block; animation:fadeIn .2s ease; pointer-events:auto; }
     @keyframes fadeIn { from{opacity:0} to{opacity:1} }
 
     .cele-wrap{
@@ -39,14 +40,16 @@
       50%{ transform:translateY(-8px) }
     }
 
-    /* Confetti */
+    /* Confetti – FIX: Fall über 'top', Rotation über 'transform' getrennt */
     .confetti{
-      position:absolute; top:-10px; width:8px; height:14px; opacity:.9;
-      animation:fall linear forwards, spin ease-in-out infinite;
+      position:fixed;              /* statt absolute */
+      top:-10px;                   /* Start oberhalb des Viewports */
+      width:8px; height:14px; opacity:.9;
       border-radius:2px;
+      animation: fallY linear forwards, spin ease-in-out infinite;
     }
-    @keyframes fall{
-      to{ transform:translateY(110vh) rotate(360deg); opacity:1; }
+    @keyframes fallY{
+      to{ top:110vh; opacity:1; }
     }
     @keyframes spin{
       0%{ transform:rotate(0deg) }
@@ -220,7 +223,7 @@ initBgm();
 const overlay = document.getElementById('celebrateOverlay');
 const celeText = document.getElementById('celeText');
 function makeConfetti(team='A', count=120){
-  // remove old confetti
+  // alte Konfetti entfernen
   document.querySelectorAll('#celebrateOverlay .confetti').forEach(n=>n.remove());
   const colors = team==='A'
     ? ['#ff4d6d','#ffd166','#ff7aa2','#ffe08a']
@@ -232,9 +235,10 @@ function makeConfetti(team='A', count=120){
     d.style.background = colors[Math.floor(Math.random()*colors.length)];
     const dur = 2.5 + Math.random()*2.5; // 2.5-5s
     const delay = Math.random()*0.8;     // 0-0.8s
+    // Dauer für fallY (erste Animation) und spin (zweite)
     d.style.animationDuration = `${dur}s, ${0.6 + Math.random()*0.6}s`;
-    d.style.animationDelay = `${delay}s, 0s`;
-    d.style.transform = `translateY(-10px) rotate(${Math.random()*180}deg)`;
+    d.style.animationDelay    = `${delay}s, 0s`;
+    // KEIN initiales translateY hier – Fall läuft über 'top'
     overlay.appendChild(d);
   }
 }
