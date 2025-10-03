@@ -99,6 +99,42 @@
     }
     #musicCtl button{ min-width:100px }
     #bgmVol{ width:140px; accent-color:#00e0ff; }
+
+    /* ======= NEU: Team-Strikes (Kreuze) ======= */
+    .strikesWrap{
+      display:grid; grid-template-columns:1fr 1fr; gap:10px;
+      margin:6px 0 12px 0;
+    }
+    .teamStrikes{
+      padding:8px; border:1px solid var(--line); border-radius:12px; background:rgba(11,15,25,.55);
+    }
+    .teamStrikes .label{
+      font-size:12px; opacity:.85; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;
+    }
+    .teamStrikes.teamA .label strong{ color:var(--teamA); }
+    .teamStrikes.teamB .label strong{ color:var(--teamB); }
+    .strikes{
+      display:flex; gap:8px; align-items:center; justify-content:center;
+    }
+    .strike{
+      width:18px; height:18px; opacity:.35;
+      border:1px solid var(--line); border-radius:6px;
+      display:flex; align-items:center; justify-content:center;
+      box-shadow: 0 0 0 rgba(0,0,0,0);
+      transition: transform .15s ease, opacity .15s ease, border-color .15s ease, box-shadow .15s ease;
+    }
+    .strike svg{ width:14px; height:14px; opacity:0; }
+    .teamStrikes.teamA .strike.active{
+      opacity:1; border-color: rgba(255,77,109,.6);
+      box-shadow: 0 0 14px rgba(255,77,109,.35);
+      transform: translateY(-1px);
+    }
+    .teamStrikes.teamB .strike.active{
+      opacity:1; border-color: rgba(77,163,255,.6);
+      box-shadow: 0 0 14px rgba(77,163,255,.35);
+      transform: translateY(-1px);
+    }
+    .strike.active svg{ opacity:1; }
   </style>
 </head>
 <body>
@@ -127,6 +163,33 @@
     <!-- Linke Spalte: Spieler & Spy-Chat -->
     <div class="card" style="flex:2">
       <h2 class="h">Spieler & Teams</h2>
+
+      <!-- NEU: Sichtbare Kreuze (Strikes) pro Team -->
+      <div class="strikesWrap">
+        <div class="teamStrikes teamA">
+          <div class="label">
+            <strong>Team Rot</strong>
+            <span>Fehler: <span id="txtA">0/3</span></span>
+          </div>
+          <div class="strikes" id="strikes-A">
+            <div class="strike"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
+            <div class="strike"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
+            <div class="strike"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
+          </div>
+        </div>
+        <div class="teamStrikes teamB">
+          <div class="label">
+            <strong>Team Blau</strong>
+            <span>Fehler: <span id="txtB">0/3</span></span>
+          </div>
+          <div class="strikes" id="strikes-B">
+            <div class="strike"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
+            <div class="strike"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
+            <div class="strike"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
+          </div>
+        </div>
+      </div>
+
       <div id="players" class="list"></div>
 
       <h2 class="h" style="margin-top:10px">Team-Chats (live)</h2>
@@ -286,7 +349,7 @@ function confettiBurst(durationMs=4500, team='A'){
       rot: Math.random()*Math.PI,
       vr: -0.2 + Math.random()*0.4
     });
-    }
+  }
 
   let rafId;
   const t0 = performance.now();
@@ -355,6 +418,23 @@ function renderPlayers(players){
     playersDiv.appendChild(row);
   });
 }
+
+// ======= NEU: Strikes-Rendering (Admin) =======
+function renderStrikes(team, count){
+  const wrap = document.getElementById(team === 'A' ? 'strikes-A' : 'strikes-B');
+  const txt  = document.getElementById(team === 'A' ? 'txtA' : 'txtB');
+  if (!wrap || !txt) return;
+  const items = wrap.querySelectorAll('.strike');
+  items.forEach((el, idx) => {
+    if (idx < count) el.classList.add('active');
+    else el.classList.remove('active');
+  });
+  txt.textContent = `${count}/3`;
+}
+socket.on('strikes:update', ({ A=0, B=0 }) => {
+  renderStrikes('A', Math.max(0, Math.min(3, A)));
+  renderStrikes('B', Math.max(0, Math.min(3, B)));
+});
 
 // Brett rendern (zeigt 1..5 als Label)
 function renderBoard(board){
