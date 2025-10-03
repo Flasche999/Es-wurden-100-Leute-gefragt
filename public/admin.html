@@ -578,6 +578,7 @@ socket.on('answer:revealed', (p) => {
   }
 });
 
+// NEU: Wrong-Sound wird NACH Strike-Update vom Server via 'guess:wrong' getriggert
 socket.on('guess:wrong', () => {
   const s = document.getElementById('sfxWrong');
   if (s) s.play().catch(()=>{});
