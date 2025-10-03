@@ -5,57 +5,57 @@
       "items": [
         {
           "points": 10,
-          "q": "Nenne etwas, das viele Menschen sammeln.",
+          "q": "Etwas, das man nie im Kühlschrank erwarten würde.",
           "answers": [
-            { "text": "Briefmarken", "percent": 35, "alts": ["Marken"] },
-            { "text": "Münzen", "percent": 28 },
-            { "text": "Figuren", "percent": 15, "alts": ["Actionfiguren", "Sammelfiguren"] },
-            { "text": "Autogramme", "percent": 12 },
-            { "text": "Karten", "percent": 10, "alts": ["Pokémonkarten", "Trading Cards"] }
+            { "text": "Fernbedienung", "percent": 34 },
+            { "text": "Socken", "percent": 22 },
+            { "text": "Handy", "percent": 16 },
+            { "text": "Haustier", "percent": 14, "alts": ["Katze", "Hund"] },
+            { "text": "Zahnbürste", "percent": 14 }
           ]
         },
         {
           "points": 20,
-          "q": "Nenne ein typisches Haustier.",
+          "q": "Etwas, das Menschen heimlich googeln.",
           "answers": [
-            { "text": "Hund", "percent": 52 },
-            { "text": "Katze", "percent": 38 },
-            { "text": "Hamster", "percent": 5 },
-            { "text": "Kaninchen", "percent": 3 },
-            { "text": "Fisch", "percent": 2 }
+            { "text": "Gesundheitssymptome", "percent": 42 },
+            { "text": "Ex-Freund/in", "percent": 22 },
+            { "text": "Promi-Gehälter", "percent": 14 },
+            { "text": "Peinliche Fragen", "percent": 12 },
+            { "text": "Wie koche ich Nudeln?", "percent": 10 }
           ]
         },
         {
           "points": 30,
-          "q": "Etwas, das man im Kühlschrank findet.",
+          "q": "Peinliche Situation im Alltag.",
           "answers": [
-            { "text": "Milch", "percent": 40 },
-            { "text": "Eier", "percent": 25 },
-            { "text": "Butter", "percent": 15 },
-            { "text": "Käse", "percent": 12 },
-            { "text": "Wurst", "percent": 8 }
+            { "text": "Stolpern/Fallen", "percent": 38 },
+            { "text": "Falschen Leuten winken", "percent": 26 },
+            { "text": "Name vergessen", "percent": 14 },
+            { "text": "Reißverschluss offen", "percent": 12 },
+            { "text": "Laut pupsen", "percent": 10 }
           ]
         },
         {
           "points": 40,
-          "q": "Ein Grund, warum man zu spät kommt.",
+          "q": "Etwas, das Leute sammeln, ohne es zu merken.",
           "answers": [
-            { "text": "Verkehr/Stau", "percent": 46, "alts": ["Stau", "Verkehr"] },
-            { "text": "Verschlafen", "percent": 32 },
-            { "text": "ÖPNV", "percent": 10, "alts": ["Bus", "Bahn"] },
-            { "text": "Suche nach Schlüsseln", "percent": 7, "alts": ["Schlüssel verloren"] },
-            { "text": "Wetter", "percent": 5 }
+            { "text": "Plastiktüten", "percent": 34 },
+            { "text": "Kabel/Ladekabel", "percent": 24 },
+            { "text": "Leere Kartons", "percent": 16 },
+            { "text": "Kugelschreiber", "percent": 14 },
+            { "text": "Socken ohne Partner", "percent": 12 }
           ]
         },
         {
           "points": 50,
-          "q": "Etwas, das Glück bringt.",
+          "q": "Etwas, das Glück bringt (außer Kleeblatt).",
           "answers": [
-            { "text": "Kleeblatt", "percent": 34 },
-            { "text": "Hufeisen", "percent": 25 },
-            { "text": "Schornsteinfeger", "percent": 18 },
-            { "text": "Marienkäfer", "percent": 13 },
-            { "text": "Glücksbringer/Amulett", "percent": 10 }
+            { "text": "Schweinchen", "percent": 28 },
+            { "text": "Marienkäfer", "percent": 24 },
+            { "text": "Glückscent", "percent": 20 },
+            { "text": "Schornsteinfeger", "percent": 16 },
+            { "text": "Buddhafigur", "percent": 12 }
           ]
         }
       ]
@@ -65,57 +65,57 @@
       "items": [
         {
           "points": 10,
-          "q": "Beliebteste Fußballvereine in Deutschland.",
+          "q": "Ein Grund, warum Leute Fitnessstudio meiden.",
           "answers": [
-            { "text": "Bayern München", "percent": 60, "alts": ["FC Bayern", "FCB"] },
-            { "text": "Borussia Dortmund", "percent": 20, "alts": ["BVB", "Dortmund"] },
-            { "text": "Schalke 04", "percent": 8, "alts": ["Schalke"] },
-            { "text": "RB Leipzig", "percent": 6, "alts": ["Leipzig"] },
-            { "text": "Borussia Mönchengladbach", "percent": 6, "alts": ["Gladbach"] }
+            { "text": "Keine Motivation", "percent": 40 },
+            { "text": "Zu teuer", "percent": 22 },
+            { "text": "Zu voll", "percent": 18 },
+            { "text": "Faulheit", "percent": 12 },
+            { "text": "Peinlich vor anderen", "percent": 8 }
           ]
         },
         {
           "points": 20,
-          "q": "Nenne eine Sportart mit Ball.",
+          "q": "Ein Sport, den man eher im Fernsehen schaut als selbst macht.",
           "answers": [
-            { "text": "Fußball", "percent": 48 },
-            { "text": "Basketball", "percent": 22 },
-            { "text": "Handball", "percent": 14 },
-            { "text": "Tennis", "percent": 10 },
-            { "text": "Volleyball", "percent": 6 }
+            { "text": "Formel 1", "percent": 34 },
+            { "text": "Boxen", "percent": 22 },
+            { "text": "Ski alpin", "percent": 18 },
+            { "text": "American Football", "percent": 14 },
+            { "text": "Eishockey", "percent": 12 }
           ]
         },
         {
           "points": 30,
-          "q": "Deutsche Sportikone.",
+          "q": "Ein Ort, an dem man Sport treiben kann.",
           "answers": [
-            { "text": "Michael Schumacher", "percent": 44 },
-            { "text": "Boris Becker", "percent": 18 },
-            { "text": "Steffi Graf", "percent": 16 },
-            { "text": "Dirk Nowitzki", "percent": 12 },
-            { "text": "Franz Beckenbauer", "percent": 10 }
+            { "text": "Sporthalle", "percent": 30 },
+            { "text": "Fußballplatz", "percent": 24 },
+            { "text": "Wald", "percent": 18 },
+            { "text": "Fitnessstudio", "percent": 16 },
+            { "text": "Wohnzimmer", "percent": 12 }
           ]
         },
         {
           "points": 40,
-          "q": "Ein olympisches Symbol.",
+          "q": "Ein Sportgerät.",
           "answers": [
-            { "text": "Fünf Ringe", "percent": 70 },
-            { "text": "Fackel", "percent": 12 },
-            { "text": "Medaillen", "percent": 8 },
-            { "text": "Olympische Hymne", "percent": 5 },
-            { "text": "Maskottchen", "percent": 5 }
+            { "text": "Ball", "percent": 38 },
+            { "text": "Hantel", "percent": 22 },
+            { "text": "Seil", "percent": 14 },
+            { "text": "Schläger", "percent": 14 },
+            { "text": "Yogamatte", "percent": 12 }
           ]
         },
         {
           "points": 50,
-          "q": "Etwas im Fußballstadion.",
+          "q": "Etwas, was im Stadion laut ist.",
           "answers": [
-            { "text": "Fans/Ultras", "percent": 38 },
-            { "text": "Tore", "percent": 22 },
-            { "text": "Rasen", "percent": 16 },
-            { "text": "Wurst/Bier", "percent": 14 },
-            { "text": "Choreos", "percent": 10 }
+            { "text": "Fans/Schreie", "percent": 36 },
+            { "text": "Trommeln", "percent": 20 },
+            { "text": "Tröten", "percent": 18 },
+            { "text": "Musik/Einlauf", "percent": 14 },
+            { "text": "Stadionsprecher", "percent": 12 }
           ]
         }
       ]
@@ -125,57 +125,57 @@
       "items": [
         {
           "points": 10,
-          "q": "Beliebtes Genre.",
+          "q": "Etwas, das Gamer hassen.",
           "answers": [
-            { "text": "Action/Adventure", "percent": 40 },
-            { "text": "Shooter", "percent": 22 },
-            { "text": "RPG", "percent": 16 },
-            { "text": "Sport", "percent": 12 },
-            { "text": "Racing", "percent": 10 }
+            { "text": "Lag/Verzögerung", "percent": 34 },
+            { "text": "Pay2Win", "percent": 28 },
+            { "text": "Cheater", "percent": 20 },
+            { "text": "Stromausfall", "percent": 10 },
+            { "text": "Update mitten im Spiel", "percent": 8 }
           ]
         },
         {
           "points": 20,
-          "q": "Bekannte Plattform.",
+          "q": "Ein Kult-Spielcharakter.",
           "answers": [
-            { "text": "Steam", "percent": 46 },
-            { "text": "PlayStation", "percent": 24 },
-            { "text": "Xbox", "percent": 14 },
-            { "text": "Nintendo", "percent": 10 },
-            { "text": "Epic Games", "percent": 6 }
+            { "text": "Mario", "percent": 38 },
+            { "text": "Sonic", "percent": 20 },
+            { "text": "Pikachu", "percent": 16 },
+            { "text": "Link", "percent": 14 },
+            { "text": "Lara Croft", "percent": 12 }
           ]
         },
         {
           "points": 30,
-          "q": "Controller-Taste.",
+          "q": "Ein Grund, warum man ein Spiel ragequittet.",
           "answers": [
-            { "text": "A/X", "percent": 30 },
-            { "text": "B/O", "percent": 26 },
-            { "text": "Y/Triangle", "percent": 18 },
-            { "text": "X/Square", "percent": 16 },
-            { "text": "Start", "percent": 10 }
+            { "text": "Cheater", "percent": 30 },
+            { "text": "Immer verlieren", "percent": 24 },
+            { "text": "Lags", "percent": 18 },
+            { "text": "Team spielt schlecht", "percent": 16 },
+            { "text": "Bug/Glitch", "percent": 12 }
           ]
         },
         {
           "points": 40,
-          "q": "Klassische Figur.",
+          "q": "Ein klassisches Konsolen-Feature.",
           "answers": [
-            { "text": "Mario", "percent": 48 },
-            { "text": "Sonic", "percent": 18 },
-            { "text": "Link", "percent": 14 },
-            { "text": "Pikachu", "percent": 12 },
-            { "text": "Lara Croft", "percent": 8 }
+            { "text": "Memory Card", "percent": 30 },
+            { "text": "Rumble Pack/Vibration", "percent": 24 },
+            { "text": "LAN-Party", "percent": 18 },
+            { "text": "Lightgun", "percent": 14 },
+            { "text": "Steckmodule/Cartridges", "percent": 14 }
           ]
         },
         {
           "points": 50,
-          "q": "Multiplayer-Prinzip.",
+          "q": "Ein typischer Gamer-Snack.",
           "answers": [
-            { "text": "Battle Royale", "percent": 34 },
-            { "text": "Team Deathmatch", "percent": 22 },
-            { "text": "Capture the Flag", "percent": 16 },
-            { "text": "Coop", "percent": 14 },
-            { "text": "Survival", "percent": 14 }
+            { "text": "Chips", "percent": 38 },
+            { "text": "Pizza", "percent": 24 },
+            { "text": "Energy-Drink", "percent": 18 },
+            { "text": "Cola", "percent": 12 },
+            { "text": "Schokolade", "percent": 8 }
           ]
         }
       ]
@@ -185,57 +185,57 @@
       "items": [
         {
           "points": 10,
-          "q": "Kino-Snack.",
+          "q": "Ein Superheld aus Filmen.",
           "answers": [
-            { "text": "Popcorn", "percent": 60 },
-            { "text": "Nachos", "percent": 20 },
-            { "text": "Süßigkeiten", "percent": 8 },
-            { "text": "Eis", "percent": 6 },
-            { "text": "Hotdog", "percent": 6 }
+            { "text": "Superman", "percent": 30 },
+            { "text": "Batman", "percent": 28 },
+            { "text": "Spider-Man", "percent": 22 },
+            { "text": "Iron Man", "percent": 12 },
+            { "text": "Hulk", "percent": 8 }
           ]
         },
         {
           "points": 20,
-          "q": "Filmgenre.",
+          "q": "Ein Film, den fast jeder kennt.",
           "answers": [
-            { "text": "Komödie", "percent": 32 },
-            { "text": "Action", "percent": 28 },
-            { "text": "Drama", "percent": 18 },
-            { "text": "Horror", "percent": 12 },
-            { "text": "Sci-Fi", "percent": 10 }
+            { "text": "Titanic", "percent": 36 },
+            { "text": "Harry Potter", "percent": 26 },
+            { "text": "Der König der Löwen", "percent": 14 },
+            { "text": "Star Wars", "percent": 14 },
+            { "text": "Jurassic Park", "percent": 10 }
           ]
         },
         {
           "points": 30,
-          "q": "Berühmter Regisseur.",
+          "q": "Etwas, das man im Kino nervig findet.",
           "answers": [
-            { "text": "Steven Spielberg", "percent": 34 },
-            { "text": "Christopher Nolan", "percent": 22 },
-            { "text": "Quentin Tarantino", "percent": 18 },
-            { "text": "James Cameron", "percent": 16 },
-            { "text": "Martin Scorsese", "percent": 10 }
+            { "text": "Leute reden", "percent": 38 },
+            { "text": "Handys", "percent": 26 },
+            { "text": "Schmatzen", "percent": 14 },
+            { "text": "Zu teuer", "percent": 12 },
+            { "text": "Werbung", "percent": 10 }
           ]
         },
         {
           "points": 40,
-          "q": "Preisverleihung.",
+          "q": "Ein Filmklassiker.",
           "answers": [
-            { "text": "Oscars", "percent": 70 },
-            { "text": "Golden Globes", "percent": 12 },
-            { "text": "BAFTA", "percent": 8 },
-            { "text": "Cannes", "percent": 6 },
-            { "text": "Berlinale", "percent": 4 }
+            { "text": "Casablanca", "percent": 24 },
+            { "text": "Zurück in die Zukunft", "percent": 22 },
+            { "text": "Der Pate", "percent": 20 },
+            { "text": "Forrest Gump", "percent": 18 },
+            { "text": "E.T.", "percent": 16 }
           ]
         },
         {
           "points": 50,
-          "q": "Drehort.",
+          "q": "Ein berühmter Filmbösewicht.",
           "answers": [
-            { "text": "Hollywood", "percent": 50 },
-            { "text": "New York", "percent": 16 },
-            { "text": "London", "percent": 12 },
-            { "text": "Berlin", "percent": 12 },
-            { "text": "Vancouver", "percent": 10 }
+            { "text": "Darth Vader", "percent": 34 },
+            { "text": "Joker", "percent": 26 },
+            { "text": "Lord Voldemort", "percent": 18 },
+            { "text": "Thanos", "percent": 12 },
+            { "text": "Hannibal Lecter", "percent": 10 }
           ]
         }
       ]
@@ -245,57 +245,57 @@
       "items": [
         {
           "points": 10,
-          "q": "Etwas auf dem Frühstückstisch.",
+          "q": "Etwas, das man morgens als Erstes macht.",
           "answers": [
-            { "text": "Brötchen", "percent": 36 },
-            { "text": "Butter", "percent": 22 },
-            { "text": "Marmelade", "percent": 16 },
-            { "text": "Kaffee", "percent": 14 },
-            { "text": "Käse", "percent": 12 }
+            { "text": "Zähne putzen", "percent": 30 },
+            { "text": "Handy checken", "percent": 26 },
+            { "text": "Kaffee trinken", "percent": 18 },
+            { "text": "Duschen", "percent": 14 },
+            { "text": "Auf die Toilette gehen", "percent": 12 }
           ]
         },
         {
           "points": 20,
-          "q": "Transportmittel in der Stadt.",
+          "q": "Ein Grund, warum man zu spät zur Arbeit kommt.",
           "answers": [
-            { "text": "Bus", "percent": 34 },
-            { "text": "U-Bahn", "percent": 24 },
-            { "text": "Auto", "percent": 18 },
-            { "text": "Tram", "percent": 14 },
-            { "text": "Fahrrad", "percent": 10 }
+            { "text": "Stau", "percent": 36 },
+            { "text": "Verschlafen", "percent": 28 },
+            { "text": "ÖPNV verspätet", "percent": 14 },
+            { "text": "Kind/Haushalt", "percent": 12 },
+            { "text": "Wetter", "percent": 10 }
           ]
         },
         {
           "points": 30,
-          "q": "Europäisches Land.",
+          "q": "Etwas, das man im Urlaub unbedingt macht.",
           "answers": [
-            { "text": "Deutschland", "percent": 30 },
-            { "text": "Frankreich", "percent": 22 },
-            { "text": "Italien", "percent": 18 },
-            { "text": "Spanien", "percent": 16 },
-            { "text": "Niederlande", "percent": 14 }
+            { "text": "Strand besuchen", "percent": 36 },
+            { "text": "Cocktail trinken", "percent": 20 },
+            { "text": "Souvenirs kaufen", "percent": 18 },
+            { "text": "Sonnenbaden", "percent": 14 },
+            { "text": "Fotos machen", "percent": 12 }
           ]
         },
         {
           "points": 40,
-          "q": "Etwas mit Batterie.",
+          "q": "Etwas, das man im Büro findet.",
           "answers": [
-            { "text": "Fernbedienung", "percent": 28 },
-            { "text": "Taschenlampe", "percent": 22 },
-            { "text": "Spielzeug", "percent": 18 },
-            { "text": "Uhr", "percent": 16 },
-            { "text": "Kamera", "percent": 16 }
+            { "text": "Computer", "percent": 34 },
+            { "text": "Kaffeemaschine", "percent": 24 },
+            { "text": "Drucker", "percent": 16 },
+            { "text": "Aktenordner", "percent": 14 },
+            { "text": "Post-its", "percent": 12 }
           ]
         },
         {
           "points": 50,
-          "q": "Beliebtes Getränk.",
+          "q": "Etwas, das fast jeder Haushalt hat.",
           "answers": [
-            { "text": "Wasser", "percent": 40 },
-            { "text": "Cola", "percent": 20 },
-            { "text": "Saft", "percent": 16 },
-            { "text": "Kaffee", "percent": 14 },
-            { "text": "Tee", "percent": 10 }
+            { "text": "Fernseher", "percent": 40 },
+            { "text": "Kühlschrank", "percent": 26 },
+            { "text": "Staubsauger", "percent": 14 },
+            { "text": "Mikrowelle", "percent": 12 },
+            { "text": "Toaster", "percent": 8 }
           ]
         }
       ]
