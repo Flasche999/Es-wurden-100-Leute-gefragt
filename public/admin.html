@@ -7,6 +7,68 @@
   <link rel="stylesheet" href="/style.css" />
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <style>
+    :root{
+      --bg:#0b0f19; --card:#121828; --muted:#9aa4b2; --line:#22345a;
+      --teamA:#ff4d6d; --teamB:#4da3ff;
+      --ok:#21c55d; --warn:#f59e0b;
+    }
+    body{ background:#0b0f19; color:#e5e7eb; font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+    .container{ max-width:1100px; margin:18px auto; padding:0 12px; }
+    .header{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+    .h{ font-size:20px; margin:0 0 8px; }
+    .small{ font-size:12px; opacity:.9 }
+    .card{ background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+           border:1px solid rgba(255,255,255,.08); border-radius:16px; padding:12px }
+    .row{ display:flex; gap:12px }
+    .controls{ display:flex; gap:8px; flex-wrap:wrap; align-items:center }
+    .btn{ background:#18223a; border:1px solid #2a3f6b; border-radius:10px; padding:8px 10px; cursor:pointer }
+    .btn:hover{ filter:brightness(1.07) }
+    .btn.ok{ background:#11351f; border-color:#237a45 }
+    .btn.warn{ background:#3a2a11; border-color:#6b4a2a }
+    .input{ background:#0f1729; color:#e5e7eb; border:1px solid #2a3f6b; border-radius:10px; padding:8px 10px; min-width:160px }
+
+    /* Zug-Banner + Body-Akzent */
+    .notice{ background:#101933; border:1px solid #2a3f6b; padding:8px 10px; border-radius:10px }
+    body.turnA .notice{ border-color:rgba(255,77,109,.55) }
+    body.turnB .notice{ border-color:rgba(77,163,255,.55) }
+
+    /* Spieler/Teams */
+    #players .player{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:8px 10px; border:1px solid rgba(255,255,255,.08); border-radius:10px; margin-bottom:6px;
+      background:rgba(255,255,255,.02);
+    }
+    .player.teamA{ box-shadow:inset 0 0 0 1px rgba(255,77,109,.2) }
+    .player.teamB{ box-shadow:inset 0 0 0 1px rgba(77,163,255,.2) }
+    .player.active{ border-color:#ffffff22; background:rgba(255,255,255,.035) }
+    .team-pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #2a3f6b }
+    .teamA .team-pill, .team-pill.teamA{ background:rgba(255,77,109,.15); border-color:rgba(255,77,109,.35) }
+    .teamB .team-pill, .team-pill.teamB{ background:rgba(77,163,255,.15); border-color:rgba(77,163,255,.35) }
+
+    /* Board */
+    .board{ display:grid; grid-template-columns: repeat(5, 1fr); gap:8px }
+    .cat{ font-weight:700; text-align:center; margin:6px 0 8px; opacity:.95 }
+    .tiles{ display:grid; grid-template-rows: repeat(5, 68px); gap:8px }
+    .tile{
+      display:flex; align-items:center; justify-content:center;
+      border:1px solid rgba(255,255,255,.08); border-radius:12px;
+      background:linear-gradient(180deg,#12203a,#0e172a); font-size:18px; user-select:none;
+      cursor:pointer; transition:transform .05s ease, filter .15s ease;
+    }
+    .tile:hover{ transform:translateY(-1px); filter:brightness(1.05) }
+    .tile.used{ background:#0d1424; border-style:dashed; color:#9aa4b2; cursor:not-allowed; filter:saturate(.7) opacity(.85) }
+
+    /* Antwortenliste im Admin */
+    .answer-row{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:8px 10px; border:1px solid rgba(255,255,255,.08); border-radius:10px; margin:6px 0;
+      background:rgba(255,255,255,.02);
+    }
+    .answer-row.revealed{ background:rgba(33,197,93,.08); border-color:rgba(33,197,93,.35) }
+
+    /* Spy-Chat */
+    #spy .player{ margin-bottom:6px }
+
     /* ===== Winner-Animation (Konfetti + Krone) ===== */
     #celebrateWrap{
       position:fixed; inset:0; display:none; align-items:center; justify-content:center;
@@ -224,12 +286,11 @@ function confettiBurst(durationMs=4500, team='A'){
       rot: Math.random()*Math.PI,
       vr: -0.2 + Math.random()*0.4
     });
-  }
+    }
 
   let rafId;
   const t0 = performance.now();
   function tick(t){
-    const dt = 16/1000;
     ctx.clearRect(0,0,canvas.width,canvas.height);
     for(const p of P){
       p.x += p.vx;
@@ -425,7 +486,8 @@ socket.on('tile:revealed', (p) => {
 
 // Sound + Live-Refresh der Antwortenzeile (ohne auf kompletten State zu warten)
 socket.on('answer:revealed', (p) => {
-  document.getElementById('sfxCorrect').play().catch(()=>{});
+  const s = document.getElementById('sfxCorrect');
+  if (s) s.play().catch(()=>{});
   if (adminBoardCache && lastTile && lastTile.ci===p.catIndex && lastTile.ii===p.itemIndex) {
     const it = adminBoardCache.categories?.[p.catIndex]?.items?.[p.itemIndex];
     if (it && it.answers?.[p.index]) {
@@ -437,7 +499,8 @@ socket.on('answer:revealed', (p) => {
 });
 
 socket.on('guess:wrong', () => {
-  document.getElementById('sfxWrong').play().catch(()=>{});
+  const s = document.getElementById('sfxWrong');
+  if (s) s.play().catch(()=>{});
 });
 
 socket.on('chat:spy', (m) => {
