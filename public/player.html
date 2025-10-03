@@ -498,7 +498,7 @@ socket.on('answer:revealed', p => {
   row.lastChild.textContent  = `${p.percent}%`;
 });
 
-// Falschantwort-Sound
+// Falschantwort-Sound (kommt direkt NACH Strike-Update vom Server)
 socket.on('guess:wrong', () => {
   document.getElementById('sfxWrong').play().catch(()=>{});
 });
