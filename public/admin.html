@@ -135,6 +135,25 @@
       transform: translateY(-1px);
     }
     .strike.active svg{ opacity:1; }
+
+    /* ======= NEU: Admin-Strike-Controls & Runden-Overlay ======= */
+    .strikeCtrls{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px }
+    .strikeCtrls .btn{ padding:6px 8px }
+    #roundOverlay{
+      position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+      background:rgba(0,0,0,.5); z-index:10000;
+    }
+    #roundOverlay.show{ display:flex; }
+    .roundCard{
+      width:min(800px, 92vw);
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:14px;
+      box-shadow:0 18px 60px rgba(0,0,0,.45);
+    }
+    .roundTable{ width:100%; border-collapse:collapse; font-size:14px; margin-top:8px }
+    .roundTable th, .roundTable td{ border:1px solid #22345a; padding:6px 8px; text-align:left }
+    .kbd{ font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+          border:1px solid #2a3f6b; padding:2px 6px; border-radius:6px; background:#0f1729; font-size:12px }
   </style>
 </head>
 <body>
@@ -153,6 +172,9 @@
       <button class="btn ok" id="btnCelebrate">Gewinner-Team anzeigen</button>
 
       <button class="btn warn" id="btnReload">Fragen neu laden</button>
+
+      <!-- NEU: Runden-Info öffnen -->
+      <button class="btn" id="btnRoundInfo" title="Übersicht & Kopieren">Runden-Info</button>
     </div>
   </div>
 
@@ -176,6 +198,12 @@
             <div class="strike"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
             <div class="strike"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
           </div>
+          <!-- NEU: Admin-Controls Team A -->
+          <div class="strikeCtrls">
+            <button class="btn" id="aMinus">– Strike A</button>
+            <button class="btn" id="aPlus">+ Strike A</button>
+            <button class="btn warn" id="aReset">Reset A</button>
+          </div>
         </div>
         <div class="teamStrikes teamB">
           <div class="label">
@@ -187,7 +215,18 @@
             <div class="strike"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
             <div class="strike"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div>
           </div>
+          <!-- NEU: Admin-Controls Team B -->
+          <div class="strikeCtrls">
+            <button class="btn" id="bMinus">– Strike B</button>
+            <button class="btn" id="bPlus">+ Strike B</button>
+            <button class="btn warn" id="bReset">Reset B</button>
+          </div>
         </div>
+      </div>
+
+      <!-- NEU: Globaler Reset für beide Teams -->
+      <div class="controls" style="margin:6px 0 10px">
+        <button class="btn warn" id="resetBoth">Alle Strikes zurücksetzen</button>
       </div>
 
       <div id="players" class="list"></div>
@@ -235,6 +274,34 @@
   <div class="crownWrap" id="crownWrap">
     <div class="crown">👑</div>
     <div class="winText" id="winText">Team</div>
+  </div>
+</div>
+
+<!-- NEU: Runden-Info Overlay -->
+<div id="roundOverlay">
+  <div class="roundCard">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px">
+      <div>
+        <div class="h" style="margin:0">Runden-Übersicht</div>
+        <div class="small" id="roundMeta">—</div>
+      </div>
+      <div class="controls">
+        <button class="btn" id="btnCopyRound" title="In Zwischenablage kopieren">Kopieren</button>
+        <button class="btn warn" id="btnCloseRound">Schließen</button>
+      </div>
+    </div>
+    <table class="roundTable" id="roundTable">
+      <thead>
+        <tr><th>#</th><th>Spieler</th><th>Team</th><th>Punkte</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="small" style="margin-top:8px">
+      Shortcuts: <span class="kbd">A</span>/<span class="kbd">Shift+A</span> Strike ± Team A ·
+      <span class="kbd">B</span>/<span class="kbd">Shift+B</span> Strike ± Team B ·
+      <span class="kbd">W</span> Als falsch werten ·
+      <span class="kbd">Esc</span> schließen
+    </div>
   </div>
 </div>
 
@@ -602,7 +669,7 @@ socket.on('celebrate:winner', ({ team }) => {
   setTimeout(()=> updateTurnUI(currentTurnTeam), 5400);
 });
 
-// *** Controls ***
+// *** Controls (bestehend) ***
 document.getElementById('btnDraw').onclick  = () => socket.emit('admin:drawStartTeam');
 document.getElementById('btnNext').onclick  = () => socket.emit('admin:nextRound');
 document.getElementById('btnReload').onclick= () => location.reload();
@@ -623,6 +690,96 @@ document.getElementById('btnCelebrate').onclick = () => {
   if (t !== 'A' && t !== 'B') return;
   socket.emit('admin:celebrate', { team: t });
 };
+
+// ====== NEU: Strike-Controls verdrahten ======
+const aMinus = document.getElementById('aMinus');
+const aPlus  = document.getElementById('aPlus');
+const aReset = document.getElementById('aReset');
+const bMinus = document.getElementById('bMinus');
+const bPlus  = document.getElementById('bPlus');
+const bReset = document.getElementById('bReset');
+const resetBoth = document.getElementById('resetBoth');
+
+if (aMinus) aMinus.onclick = () => socket.emit('admin:adjustStrikes', { team:'A', delta:-1 });
+if (aPlus)  aPlus.onclick  = () => socket.emit('admin:adjustStrikes', { team:'A', delta:+1 });
+if (aReset) aReset.onclick = () => socket.emit('admin:resetStrikes',   { team:'A' });
+if (bMinus) bMinus.onclick = () => socket.emit('admin:adjustStrikes', { team:'B', delta:-1 });
+if (bPlus)  bPlus.onclick  = () => socket.emit('admin:adjustStrikes', { team:'B', delta:+1 });
+if (bReset) bReset.onclick = () => socket.emit('admin:resetStrikes',   { team:'B' });
+if (resetBoth) resetBoth.onclick = () => socket.emit('admin:resetStrikes', { team:'ALL' });
+
+// ====== NEU: Tastatur-Shortcuts ======
+document.addEventListener('keydown', (e)=>{
+  // ESC: Overlay schließen
+  if (e.key === 'Escape'){
+    hideRoundOverlay();
+    return;
+  }
+  if (e.key.toLowerCase() === 'a'){
+    if (e.shiftKey) socket.emit('admin:adjustStrikes', { team:'A', delta:-1 });
+    else            socket.emit('admin:adjustStrikes', { team:'A', delta:+1 });
+  }
+  if (e.key.toLowerCase() === 'b'){
+    if (e.shiftKey) socket.emit('admin:adjustStrikes', { team:'B', delta:-1 });
+    else            socket.emit('admin:adjustStrikes', { team:'B', delta:+1 });
+  }
+  if (e.key.toLowerCase() === 'w'){
+    // Als falsch werten (Team am Zug)
+    if (lastTile) socket.emit('admin:markWrong', { catIndex:lastTile.ci, itemIndex:lastTile.ii });
+  }
+});
+
+// ====== NEU: Runden-Overlay (Spielstand / Kopieren) ======
+const roundOverlay = document.getElementById('roundOverlay');
+const btnRoundInfo = document.getElementById('btnRoundInfo');
+const btnCloseRound= document.getElementById('btnCloseRound');
+const btnCopyRound = document.getElementById('btnCopyRound');
+const roundTable   = document.querySelector('#roundTable tbody');
+const roundMeta    = document.getElementById('roundMeta');
+
+function showRoundOverlay(){
+  // Meta
+  const metaTxt = `Am Zug: ${currentTurnTeam ? (currentTurnTeam==='A'?'Team Rot':'Team Blau') : '—'}`;
+  roundMeta.textContent = metaTxt;
+
+  // Tabelle
+  roundTable.innerHTML = '';
+  const rows = [...lastPlayersCache]
+    .sort((a,b)=> b.score - a.score)
+    .map((p,i)=> ({i:i+1, name:p.name, team:p.team, score:p.score}));
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.i}</td><td>${r.name}</td><td>${r.team}</td><td>${r.score}</td>`;
+    roundTable.appendChild(tr);
+  });
+
+  roundOverlay.classList.add('show');
+}
+function hideRoundOverlay(){ roundOverlay.classList.remove('show'); }
+
+if (btnRoundInfo) btnRoundInfo.onclick = showRoundOverlay;
+if (btnCloseRound) btnCloseRound.onclick = hideRoundOverlay;
+if (roundOverlay) roundOverlay.addEventListener('click', (e)=>{ if (e.target === roundOverlay) hideRoundOverlay(); });
+
+if (btnCopyRound){
+  btnCopyRound.onclick = async ()=>{
+    const rows = [...lastPlayersCache]
+      .sort((a,b)=> b.score - a.score)
+      .map((p,i)=> `${i+1}. ${p.name} (Team ${p.team}) – ${p.score} Punkte`);
+    const txt = [
+      'Runden-Übersicht',
+      `Am Zug: ${currentTurnTeam ? (currentTurnTeam==='A'?'Team Rot':'Team Blau') : '—'}`,
+      ...rows
+    ].join('\n');
+    try{
+      await navigator.clipboard.writeText(txt);
+      btnCopyRound.textContent = 'Kopiert ✓';
+      setTimeout(()=> btnCopyRound.textContent = 'Kopieren', 1200);
+    }catch(_){
+      alert('Kopieren nicht möglich.');
+    }
+  };
+}
 </script>
 </body>
 </html>
