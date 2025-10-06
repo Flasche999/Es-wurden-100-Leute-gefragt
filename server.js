@@ -1,4 +1,4 @@
-// server.js – Quiz "100 Leute gefragt" – Team-Style (v2.4 – Timer + Admin-Rejoin Re-Focus)
+// server.js – Quiz "100 Leute gefragt" – Team-Style (v2.4.1 – Timer + Admin-Rejoin Re-Focus + Strike-Controls)
 // NEUES PUNKTESYSTEM & TILE-LABELS:
 // - Kacheln zeigen nur noch 1..5 (kein 10/20/30/40/50).
 // - Punkte = SUMME der aufgedeckten Prozente.
@@ -22,6 +22,13 @@
 //   · Steal-Timeout: Auto-Punkte an Startteam (bis dahin aufgedeckte Summe) → Feld zu
 //   · Broadcast per `timer:update` (alle 250ms Tick)
 // - Admin-Rejoin Re-Focus: `admin:refocusCurrent` sendet die laufende Kategorie inkl. Frage/Strikes/Timer erneut
+//
+// ──────────────────────────────────────────────────────────────────────────────
+// NEU (v2.4.1):
+// - Admin-Strike-Controls (Buttons/Shortcuts aus Admin-UI):
+//   · `admin:adjustStrikes`  { team:'A'|'B', delta:+1|-1 }  → sichtbare Kreuze anpassen (0..3).
+//     – In der Main-Phase: bei +1 wird zusätzlich `guess:wrong` gesendet (für Sound) und bei Erreichen von 3 → Steal-Phase.
+//   · `admin:resetStrikes`   { team:'A'|'B'|'ALL' }         → Strikes auf 0 setzen (keine Phasenänderung).
 //
 // ──────────────────────────────────────────────────────────────────────────────
 // NEU (v2.3):
@@ -709,6 +716,57 @@ io.on('connection', socket => {
     const val = Number(points)||0;
     p.score += val;
     io.emit('score:update', { playerId:p.id, score:p.score, delta:val });
+    emitState();
+  });
+
+  // ─────────────────────────────────────────────────────────
+  // NEU: Admin-Strike-Controls (Buttons/Shortcuts)
+  // ─────────────────────────────────────────────────────────
+  socket.on('admin:adjustStrikes', ({ team, delta }) => {
+    const { catIndex, itemIndex } = state.current;
+    const item = (catIndex!=null && itemIndex!=null) ? state.board.categories[catIndex]?.items[itemIndex] : null;
+    if (!item || !item.revealed || item.answered) return;
+    const t = (team === 'B') ? 'B' : 'A';
+    const d = Math.sign(Number(delta)||0); // -1 | 0 | +1
+    if (d === 0) return;
+
+    // Vorheriger Wert
+    const before = (t === 'A') ? item.meta.wrongA : item.meta.wrongB;
+
+    // Anpassung 0..3 clampen
+    if (t === 'A') item.meta.wrongA = Math.max(0, Math.min(3, item.meta.wrongA + d));
+    else           item.meta.wrongB = Math.max(0, Math.min(3, item.meta.wrongB + d));
+
+    const after = (t === 'A') ? item.meta.wrongA : item.meta.wrongB;
+
+    // Strikes zuerst broadcasten
+    broadcastStrikesFromItem(item);
+
+    // In der Main-Phase: bei +1 → Wrong-Sound abfeuern (Feedback) und ggf. Steal starten
+    if (!item.meta.stealActive && state.timer.phase === 'main' && d > 0) {
+      io.emit('guess:wrong', { catIndex, itemIndex, team:t, wrongs:after });
+      if (after >= 3 && before < 3) {
+        startStealPhase(item);
+      }
+    }
+
+    emitState();
+  });
+
+  socket.on('admin:resetStrikes', ({ team }) => {
+    const { catIndex, itemIndex } = state.current;
+    const item = (catIndex!=null && itemIndex!=null) ? state.board.categories[catIndex]?.items[itemIndex] : null;
+    if (!item) return;
+
+    const which = String(team||'').toUpperCase();
+    if (which === 'A' || which === 'B') {
+      if (which === 'A') item.meta.wrongA = 0; else item.meta.wrongB = 0;
+    } else {
+      // 'ALL' oder alles andere → beide nullen
+      item.meta.wrongA = 0;
+      item.meta.wrongB = 0;
+    }
+    broadcastStrikesFromItem(item);
     emitState();
   });
 
