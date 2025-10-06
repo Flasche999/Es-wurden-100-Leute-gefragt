@@ -1,4 +1,4 @@
-// server.js – Quiz "100 Leute gefragt" – Team-Style (v2.3 – Admin-Rejoin + Snapshot + optionale Persistenz)
+// server.js – Quiz "100 Leute gefragt" – Team-Style (v2.4 – Timer + Admin-Rejoin Re-Focus)
 // NEUES PUNKTESYSTEM & TILE-LABELS:
 // - Kacheln zeigen nur noch 1..5 (kein 10/20/30/40/50).
 // - Punkte = SUMME der aufgedeckten Prozente.
@@ -12,17 +12,28 @@
 // - Admin-Event „admin:celebrate” → broadcast „celebrate:winner” (Konfetti/Krone bei allen Clients)
 // - Hintergrundmusik /music/bgm.mp3 mit Silent-Fallback (verhindert 416-Logs)
 // - Lock-in/Select-Sound /sfx/select.mp3 bei Feldwahl (Silent-Fallback)
+//
+// ──────────────────────────────────────────────────────────────────────────────
+// NEU (v2.4):
+// - Rundentimer (Server-gesteuert): Main 1:30, Steal 0:30
+//   · Start bei Feld-Aufdeckung (player:pickTile)
+//   · Reset bei jeder Aktion (richtig ODER falsch)
+//   · Main-Timeout: Strike fürs aktive Team; nach 3 Strikes → Steal-Phase
+//   · Steal-Timeout: Auto-Punkte an Startteam (bis dahin aufgedeckte Summe) → Feld zu
+//   · Broadcast per `timer:update` (alle 250ms Tick)
+// - Admin-Rejoin Re-Focus: `admin:refocusCurrent` sendet die laufende Kategorie inkl. Frage/Strikes/Timer erneut
+//
 // ──────────────────────────────────────────────────────────────────────────────
 // NEU (v2.3):
 // - „Server als Source of Truth“ + Admin-Rejoin/Snapshot:
 //     · admin:join { sessionId } → Server schickt admin:snapshot (kompletter Spielstand)
-//     · role:admin liefert ebenfalls state:admin (wie bisher), admin:join ist robust für Reconnect-Flows
-// - Optionale Persistenz: Spielstand wird alle 10s in ./state.json gespeichert und beim Start geladen
-//   (Spieler-Sockets werden natürlich nicht „wiederbelebt“, aber Fragen/Fortschritt bleiben erhalten)
+// - Optionale Persistenz: ./state.json (Board/Fortschritt)
+//
 // ──────────────────────────────────────────────────────────────────────────────
 // NEU (Strikes/Kreuze unter Teamnamen):
 // - Server broadcastet `strikes:update` mit { A, B } = 0..3
 // - Reset bei neuem Feld, Rundenwechsel, Feldschluss, Steal-Ende
+//
 // ──────────────────────────────────────────────────────────────────────────────
 // NEU (Sound-Reihenfolge bei "falsch"):
 // - Beim falschen Versuch in der normalen Phase: ZUERST Kreuze updaten (strikes:update),
@@ -48,7 +59,7 @@ app.use(express.json());
 // Audio-Fallback (vermeidet 416-Logs bei leeren/fehlenden Dateien)
 // ─────────────────────────────────────────────────────────────
 const SILENCE_WAV_BASE64 =
-  "UklGRl4RAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YToRAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+  "UklGRl4RAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YToRAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
 function sendMediaOrSilent(subdir, name, res) {
   const p = path.join(__dirname, "public", subdir, name);
@@ -66,16 +77,19 @@ function sendMediaOrSilent(subdir, name, res) {
 // Audio-Routen MÜSSEN vor express.static kommen:
 app.get("/sfx/correct.mp3", (_req, res) => sendMediaOrSilent("sfx",   "correct.mp3", res));
 app.get("/sfx/wrong.mp3",   (_req, res) => sendMediaOrSilent("sfx",   "wrong.mp3",   res));
-// Lock-in/Select-Sound bei Feldwahl
 app.get("/sfx/select.mp3",  (_req, res) => sendMediaOrSilent("sfx",   "select.mp3",  res));
-// Hintergrundmusik
 app.get("/music/bgm.mp3",   (_req, res) => sendMediaOrSilent("music", "bgm.mp3",     res));
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/healthz', (_req,res)=>res.status(200).type('text').send('OK'));
 
 // ─────────────────────────────────────────────────────────────
-const DATA_PATH = path.join(__dirname, 'public', 'fragen.json');
+const DATA_PATH  = path.join(__dirname, 'public', 'fragen.json');
+const STATE_PATH = path.join(__dirname, 'state.json');
+
+// Timer-Konstanten
+const DUR_MAIN  = 90; // 1:30
+const DUR_STEAL = 30; // 0:30
 
 function loadData(){
   const raw = JSON.parse(fs.readFileSync(DATA_PATH, 'utf8'));
@@ -88,7 +102,7 @@ function loadData(){
           percent: Number(obj.percent)||0,
           alts: Array.isArray(obj.alts) ? obj.alts : [],
           revealed: false,
-          byTeam: null // 'A'|'B' – nur Historie/Anzeige
+          byTeam: null
         };
       });
       it.answers.sort((x,y)=> (y.percent - x.percent)); // Top → Bottom
@@ -112,40 +126,38 @@ function loadData(){
   return raw;
 }
 
-// Falls Persistenz-Datei existiert, versuchen wir später daraus zu laden:
+// Daten + optional Persistenz laden
 let db = loadData();
 
-// ─────────────────────────────────────────────────────────────
-// Globaler State (Server = Source of Truth)
-// ─────────────────────────────────────────────────────────────
 const state = {
-  players: {},            // socketId -> { id,name,team:'A'|'B', score }
-  board: db,              // Daten aus fragen.json (wird modifiziert)
-  activePlayer: null,     // optional
-  turnTeam: null,         // globaler Start-Zug, pro Feld in item.meta.turnTeam
-  adminSessions: new Set(),// registrierte Admin-Session-IDs (Info-Zweck)
-  current: { catIndex:null, itemIndex:null } // aktuell geöffnetes Feld (für Strikes)
+  players: {},                 // socketId -> { id,name,team:'A'|'B', score }
+  board: db,                   // Daten aus fragen.json (wird modifiziert)
+  activePlayer: null,
+  turnTeam: null,              // globaler Start-Zug; pro Feld item.meta.turnTeam relevant
+  adminSessions: new Set(),
+  current: { catIndex:null, itemIndex:null }, // aktuell offenes Feld
+  timer: {                     // Server-gesteuerter Rundentimer
+    running: false,
+    phase: 'main',             // 'main' | 'steal'
+    owner: 'A',                // Team unter der Uhr
+    duration: DUR_MAIN,
+    endsAt: 0,                 // ms-Zeitpunkt
+    secondsLeft: DUR_MAIN
+  }
 };
 
-// ─────────────────────────────────────────────────────────────
-// Persistenz
-// ─────────────────────────────────────────────────────────────
-const STATE_PATH = path.join(__dirname, 'state.json');
-
+// Persistenz (nur Brett/Zug, keine Spieler)
 function dumpStateToDisk(){
   try {
     const serializable = {
       board: state.board,
-      turnTeam: state.turnTeam,
-      players: {}, // nicht persistieren
-      activePlayer: null
+      turnTeam: state.turnTeam
     };
     fs.writeFileSync(STATE_PATH, JSON.stringify(serializable, null, 2));
   } catch(e){
     console.warn('State speichern fehlgeschlagen:', e.message);
   }
 }
-
 function loadStateFromDisk(){
   try {
     if (!fs.existsSync(STATE_PATH)) return false;
@@ -161,15 +173,16 @@ function loadStateFromDisk(){
   }
   return false;
 }
-
-// Beim Start versuchen zu laden:
 loadStateFromDisk();
-// Alle 10 Sekunden sichern:
 setInterval(dumpStateToDisk, 10000);
 
 // ─────────────────────────────────────────────────────────────
 // Helper
 // ─────────────────────────────────────────────────────────────
+const now = () => Date.now();
+function otherTeam(t){ return t==='A' ? 'B' : 'A'; }
+function sanitize(s){ return String(s||'').trim().toLowerCase(); }
+
 function publicBoard(){
   return {
     categories: state.board.categories.map(c=>({
@@ -192,24 +205,31 @@ function playersList(){
   return Object.values(state.players).map(p=>({ id:p.id, name:p.name, team:p.team, score:p.score }));
 }
 function makeAdminSnapshot(){
-  return { board: adminBoard(), players: playersList(), activePlayer: state.activePlayer, turnTeam: state.turnTeam };
+  return {
+    board: adminBoard(),
+    players: playersList(),
+    activePlayer: state.activePlayer,
+    turnTeam: state.turnTeam,
+    timer: state.timer,
+    current: state.current
+  };
 }
 function emitState(){
   io.emit('state:update', { board: publicBoard(), players: playersList(), activePlayer: state.activePlayer });
   io.to('admins').emit('state:admin', makeAdminSnapshot());
 }
-function otherTeam(t){ return t==='A' ? 'B' : 'A'; }
-function sanitize(s){ return String(s||'').trim().toLowerCase(); }
+function emitTimer(toSocketId=null){
+  const payload = { ...state.timer };
+  if (toSocketId) io.to(toSocketId).emit('timer:update', payload);
+  else io.emit('timer:update', payload);
+}
 function allFound(item){ return item.answers.every(a=>a.revealed); }
-
-// Punkte nach Prozentsumme
 function getRevealedPercent(item){
   return item.answers.reduce((acc,a)=> acc + (a.revealed ? Number(a.percent)||0 : 0), 0);
 }
 function getTotalPercent(item){
   return item.answers.reduce((acc,a)=> acc + (Number(a.percent)||0), 0);
 }
-
 function matchAnswer(item, guess){
   const g = sanitize(guess);
   for (let i=0;i<item.answers.length;i++){
@@ -220,26 +240,33 @@ function matchAnswer(item, guess){
   }
   return -1;
 }
-
 function awardTeamPoints(team, points){
   const members = Object.values(state.players).filter(p=>p.team===team);
   if (members.length===0) return;
-  const per = Math.floor(points / members.length) || points; // bei 1 Spieler: volle Punkte
+  const per = Math.floor(points / members.length) || points; // 1 Spieler = volle Punkte
   members.forEach(m=>{
     m.score += per;
     io.emit('score:update', { playerId:m.id, score:m.score, delta:per });
   });
+}
+function broadcastStrikesFromItem(item){
+  const A = Math.max(0, Math.min(3, item?.meta?.wrongA || 0));
+  const B = Math.max(0, Math.min(3, item?.meta?.wrongB || 0));
+  io.emit('strikes:update', { A, B });
 }
 
 function startStealPhase(item){
   item.meta.stealActive = true;
   item.meta.stealTeam   = otherTeam(item.meta.turnTeam || item.meta.originalTeam || 'A');
   item.meta.stealUsed   = false;
-  item.meta.turnTeam    = item.meta.stealTeam; // Anzeige: Abstauber-Team ist „am Zug“
+  item.meta.turnTeam    = item.meta.stealTeam; // Anzeige: Abstauber-Team „am Zug“
   io.emit('turn:changed', { turnTeam: item.meta.turnTeam });
 
-  // Strikes bleiben visuell bei 3 stehen; kein weiterer Aufbau in Steal
+  // Strikes bleiben bei 3 stehen; kein weiterer Aufbau in Steal
   broadcastStrikesFromItem(item);
+
+  // Timer auf Steal umstellen
+  startStealTimer(item.meta.stealTeam);
 }
 
 function endStealWithResult(catIndex,itemIndex,item, wasCorrect){
@@ -257,9 +284,9 @@ function endStealWithResult(catIndex,itemIndex,item, wasCorrect){
   item.answered = true;
   item.revealed = true;
 
+  // Timer stoppen, Strikes resetten
+  stopTimer();
   io.emit('tile:closed', { catIndex,itemIndex,winnerTeam:winner,reason: wasCorrect?'steal-correct':'steal-wrong', pointsAwarded: pts });
-
-  // Nach Abschluss: Strikes zurücksetzen
   io.emit('strikes:update', { A:0, B:0 });
 
   emitState();
@@ -270,22 +297,95 @@ function closeField(catIndex,itemIndex,winnerTeam,reason, pointsAwarded=null){
   item.answered = true;
   item.revealed = true;
   item.answers.forEach(a=> a.revealed = true); // alle Antworten sichtbar
-  io.emit('tile:closed', { catIndex,itemIndex,winnerTeam,reason, pointsAwarded });
 
-  // Nach Feldschluss: Strikes resetten
+  // Timer stoppen, Strikes resetten
+  stopTimer();
+  io.emit('tile:closed', { catIndex,itemIndex,winnerTeam,reason, pointsAwarded });
   io.emit('strikes:update', { A:0, B:0 });
 
   emitState();
 }
 
 // ─────────────────────────────────────────────────────────────
-// Strikes-Broadcast Hilfsfunktion (NEU)
+// TIMER-Logik (Server-seitig, unabhängig vom Admin-Tab)
 // ─────────────────────────────────────────────────────────────
-function broadcastStrikesFromItem(item){
-  const A = Math.max(0, Math.min(3, item?.meta?.wrongA || 0));
-  const B = Math.max(0, Math.min(3, item?.meta?.wrongB || 0));
-  io.emit('strikes:update', { A, B });
+function startMainTimer(ownerTeam){
+  state.timer = {
+    running: true,
+    phase: 'main',
+    owner: ownerTeam,
+    duration: DUR_MAIN,
+    endsAt: now() + DUR_MAIN * 1000,
+    secondsLeft: DUR_MAIN
+  };
+  emitTimer();
 }
+function startStealTimer(ownerTeam){
+  state.timer = {
+    running: true,
+    phase: 'steal',
+    owner: ownerTeam,
+    duration: DUR_STEAL,
+    endsAt: now() + DUR_STEAL * 1000,
+    secondsLeft: DUR_STEAL
+  };
+  emitTimer();
+}
+function stopTimer(){
+  state.timer.running = false;
+  state.timer.endsAt = now();
+  emitTimer();
+}
+// Reset auf gleiche Phase (bei jeder Aktion – richtig ODER falsch)
+function resetTimerOnAction(){
+  if (state.timer.phase === 'main') startMainTimer(state.timer.owner);
+  else if (state.timer.phase === 'steal') startStealTimer(state.timer.owner);
+}
+
+// 250ms-Tick
+setInterval(() => {
+  if (!state.timer.running) return;
+
+  const msLeft = state.timer.endsAt - now();
+  const secLeft = Math.max(0, Math.ceil(msLeft / 1000));
+  if (secLeft !== state.timer.secondsLeft) {
+    state.timer.secondsLeft = secLeft;
+    emitTimer();
+  }
+  if (msLeft > 0) return;
+
+  // Timeout eingetreten
+  const { catIndex, itemIndex } = state.current;
+  const item = (catIndex!=null && itemIndex!=null) ? state.board.categories[catIndex]?.items[itemIndex] : null;
+  if (!item || item.answered !== false || !item.revealed) {
+    stopTimer();
+    return;
+  }
+
+  if (state.timer.phase === 'main') {
+    // Main-Timeout: Strike fürs aktive Team
+    const team = item.meta.turnTeam || state.turnTeam || item.meta.originalTeam || 'A';
+    if (team === 'A') item.meta.wrongA++; else item.meta.wrongB++;
+    const wrongs = (team === 'A') ? item.meta.wrongA : item.meta.wrongB;
+
+    // 1) Strikes zuerst
+    broadcastStrikesFromItem(item);
+    // 2) Wrong-Sound
+    io.emit('guess:wrong', { catIndex, itemIndex, team, wrongs });
+
+    if (wrongs >= 3) {
+      // Steal-Phase starten (Timer wechselt automatisch in startStealPhase)
+      startStealPhase(item);
+    } else {
+      // Main-Timer neu
+      startMainTimer(team);
+    }
+    emitState();
+  } else if (state.timer.phase === 'steal') {
+    // Steal-Timeout: Auto-Punkte an Startteam
+    endStealWithResult(catIndex, itemIndex, item, false);
+  }
+}, 250);
 
 // ─────────────────────────────────────────────────────────────
 // Socket.IO
@@ -296,6 +396,7 @@ io.on('connection', socket => {
     socket.join('admins');
     socket.data.role = 'admin';
     socket.emit('state:admin', makeAdminSnapshot());
+    emitTimer(socket.id);
 
     // Beim Admin-Join aktuellen Strike-Stand senden (falls Feld offen)
     const { catIndex, itemIndex } = state.current;
@@ -312,13 +413,31 @@ io.on('connection', socket => {
       state.adminSessions.add(String(sessionId));
     }
     socket.emit('admin:snapshot', makeAdminSnapshot());
+    emitTimer(socket.id);
     socket.broadcast.emit('admin:status', { online: true });
 
-    // Auch hier ggf. Strikes schicken
     const { catIndex, itemIndex } = state.current;
     const item = (catIndex!=null && itemIndex!=null) ? state.board.categories[catIndex]?.items[itemIndex] : null;
     if (item) broadcastStrikesFromItem(item);
     else io.emit('strikes:update', { A:0, B:0 });
+  });
+
+  // Nach Reconnect: laufende Kategorie/Feld erneut an Admin „fokussieren“
+  socket.on('admin:refocusCurrent', () => {
+    const { catIndex, itemIndex } = state.current;
+    const item = (catIndex!=null && itemIndex!=null) ? state.board.categories[catIndex]?.items[itemIndex] : null;
+    if (!item) return;
+    // Frage/Tile erneut „anzeigen“
+    socket.emit('tile:revealed', { catIndex, itemIndex, question:item.q, points:item.points, turnTeam:item.meta.turnTeam });
+    // Aktuelle bereits aufgedeckte Antworten erneut an Admin pushen
+    item.answers.forEach((a, i) => {
+      if (a.revealed) {
+        socket.emit('answer:revealed', { catIndex, itemIndex, index:i, text:a.text, percent:a.percent, byTeam:a.byTeam });
+      }
+    });
+    // Strikes + Timer erneut
+    broadcastStrikesFromItem(item);
+    emitTimer(socket.id);
   });
 
   // ── Spieler-Rolle ──────────────────────────────────────────
@@ -334,6 +453,7 @@ io.on('connection', socket => {
     } else {
       socket.emit('strikes:update', { A:0, B:0 });
     }
+    emitTimer(socket.id);
   });
 
   // ── Spieler beitreten ─────────────────────────────────────
@@ -345,7 +465,7 @@ io.on('connection', socket => {
     socket.emit('welcome', { id:socket.id, name:clean, team:t });
     socket.emit('board:init', publicBoard());
 
-    // Aktuellen Strike-Stand diesem Spieler senden
+    // Aktueller Strike-Stand & Timer
     const { catIndex, itemIndex } = state.current;
     const item = (catIndex!=null && itemIndex!=null) ? state.board.categories[catIndex]?.items[itemIndex] : null;
     if (item) {
@@ -355,6 +475,7 @@ io.on('connection', socket => {
     } else {
       socket.emit('strikes:update', { A:0, B:0 });
     }
+    emitTimer(socket.id);
 
     emitState();
   });
@@ -372,10 +493,7 @@ io.on('connection', socket => {
     const start = Math.random() < 0.5 ? 'A' : 'B';
     state.turnTeam = start;
     io.emit('turn:global', { team:start });
-
-    // Rundenstart → Strikes reset
     io.emit('strikes:update', { A:0, B:0 });
-
     emitState();
   });
 
@@ -384,10 +502,7 @@ io.on('connection', socket => {
     const next = curr === 'A' ? 'B' : 'A';
     state.turnTeam = next;
     io.emit('turn:global', { team: next });
-
-    // Rundenwechsel → Strikes reset
     io.emit('strikes:update', { A:0, B:0 });
-
     emitState();
   });
 
@@ -414,13 +529,14 @@ io.on('connection', socket => {
     item.meta.stealTeam   = null;
     item.meta.stealUsed   = false;
 
-    // Merke aktuelles Feld für Strikes-Anzeige
+    // Merke aktuelles Feld für Strikes/Timer
     state.current = { catIndex, itemIndex };
 
     io.emit('tile:revealed', { catIndex,itemIndex, question:item.q, points:item.points, turnTeam:item.meta.turnTeam });
-
-    // Bei neuem Feld → Strikes 0/0
     io.emit('strikes:update', { A:0, B:0 });
+
+    // TIMER: Main für Startteam
+    startMainTimer(item.meta.turnTeam);
 
     emitState();
   });
@@ -445,7 +561,6 @@ io.on('connection', socket => {
         io.emit('answer:revealed', { catIndex,itemIndex, index:idx, text:item.answers[idx].text, percent:item.answers[idx].percent, byTeam:p.team });
         endStealWithResult(catIndex,itemIndex,item,true);
       } else {
-        // In Steal-Phase lassen wir den Sound direkt laufen:
         io.emit('sfx:wrong');
         endStealWithResult(catIndex,itemIndex,item,false);
       }
@@ -462,6 +577,9 @@ io.on('connection', socket => {
       io.emit('sfx:correct');
       io.emit('answer:revealed', { catIndex,itemIndex, index:idx, text:item.answers[idx].text, percent:item.answers[idx].percent, byTeam:p.team });
 
+      // Aktion → Timer neu (gleiches Team/Phase)
+      resetTimerOnAction();
+
       if (allFound(item)){
         const pts = getTotalPercent(item);               // meist 100
         const winner = item.meta.originalTeam || p.team; // Start-Team
@@ -477,10 +595,7 @@ io.on('connection', socket => {
     if (item.meta.turnTeam === 'A') item.meta.wrongA++; else item.meta.wrongB++;
     const wrongs = (item.meta.turnTeam === 'A') ? item.meta.wrongA : item.meta.wrongB;
 
-    // 1) Erst Kreuze updaten (sichtbar)
     broadcastStrikesFromItem(item);
-
-    // 2) Dann Wrong-Sound via guess:wrong (Clients spielen /sfx/wrong.mp3 ab)
     io.emit('guess:wrong', { catIndex,itemIndex, team:item.meta.turnTeam, wrongs });
 
     if (wrongs === 2){
@@ -488,8 +603,11 @@ io.on('connection', socket => {
       io.to('team-'+next).emit('team:prepare', { catIndex,itemIndex, note:'Ihr dürft euch beraten – Abstauber-Chance ist nah.' });
     }
     if (wrongs >= 3){
-      // Abstauber-Phase starten
+      // Abstauber-Phase starten (Timer wechselt)
       startStealPhase(item);
+    } else {
+      // Aktion (falsch) → Timer neu (gleiches Team/Phase)
+      resetTimerOnAction();
     }
 
     emitState();
@@ -515,10 +633,12 @@ io.on('connection', socket => {
     io.emit('answer:revealed', { catIndex,itemIndex, index, text:a.text, percent:a.percent, byTeam:a.byTeam });
 
     if (item.meta.stealActive){
-      // Abstauber-Regel: 1 richtige Antwort reicht → sofort Wertung nach bis dahin aufgedeckter Summe
       endStealWithResult(catIndex,itemIndex,item,true);
       return;
     } else {
+      // Aktion → Timer neu (gleiches Team/Phase)
+      resetTimerOnAction();
+
       // Normale Phase: nur wenn ALLE offen → Start-Team bekommt Gesamtsumme
       if (allFound(item)){
         const pts = getTotalPercent(item);
@@ -540,8 +660,6 @@ io.on('connection', socket => {
     state.current = { catIndex, itemIndex };
 
     if (item.meta.stealActive){
-      // In Steal-Phase: falsche Antwort → Punkte an Originalteam (bis dahin aufgedeckte Summe)
-      // (Hier lassen wir den Sound direkt laufen.)
       io.emit('sfx:wrong');
       endStealWithResult(catIndex,itemIndex,item,false);
       return;
@@ -553,11 +671,8 @@ io.on('connection', socket => {
     if (team === 'A') item.meta.wrongA++; else item.meta.wrongB++;
     const wrongs = (team === 'A') ? item.meta.wrongA : item.meta.wrongB;
 
-    // *** NEU: Reihenfolge ***
-    // 1) Erst Kreuze/Strikes sichtbar updaten
+    // *** Reihenfolge: Strikes → Ton ***
     broadcastStrikesFromItem(item);
-
-    // 2) Dann Wrong-Sound via guess:wrong (Clients spielen /sfx/wrong.mp3)
     io.emit('guess:wrong', { catIndex, itemIndex, team, wrongs });
 
     if (wrongs === 2){
@@ -566,6 +681,9 @@ io.on('connection', socket => {
     }
     if (wrongs >= 3){
       startStealPhase(item);
+    } else {
+      // Aktion (falsch) → Timer neu (gleiches Team/Phase)
+      resetTimerOnAction();
     }
 
     emitState();
@@ -576,16 +694,12 @@ io.on('connection', socket => {
     const item = state.board.categories[catIndex]?.items[itemIndex]; if (!item) return;
     if (item.answered) return;
 
-    // Default laut neuem System:
-    //  - In normaler Phase (kein Steal): Punkte = bis jetzt aufgedeckt → an Originalteam
-    //  - In Steal-Phase ohne Versuch: Punkte = bis jetzt aufgedeckt → an Originalteam
     const pts = getRevealedPercent(item);
     const winner = item.meta.originalTeam || 'A';
 
     awardTeamPoints(winner, pts);
     closeField(catIndex,itemIndex,winner,'force-close', pts);
 
-    // Nach forceClose sind keine Strikes aktiv
     io.emit('strikes:update', { A:0, B:0 });
   });
 
@@ -606,7 +720,6 @@ io.on('connection', socket => {
       if (state.activePlayer === socket.id) state.activePlayer = null;
       emitState();
     }
-    // Admin-Status aktualisieren (optional)
     if (socket.data?.role === 'admin') {
       if (socket.data.adminSessionId) state.adminSessions.delete(socket.data.adminSessionId);
       socket.broadcast.emit('admin:status', { online: false });
