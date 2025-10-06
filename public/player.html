@@ -102,6 +102,24 @@
       transform: translateY(-1px);
     }
     .strike.active svg{ opacity:1; }
+
+    /* ===== NEU: Rundentimer (Spieler) ===== */
+    #roundTimer{
+      display:none; margin:10px 0 12px; padding:8px 10px; border-radius:10px;
+      background:rgba(16,25,51,.6); border:1px solid var(--ring);
+    }
+    #roundTimer.show{ display:block; }
+    #roundTimer .timerHead{
+      display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;
+      font-size:12px; opacity:.95;
+    }
+    #roundTimer .timerPhase{ padding:2px 8px; border-radius:999px; border:1px solid var(--ring); }
+    #roundTimer .timerPhase.steal{ background:rgba(255,214,102,.12); border-color:#f6c453; }
+    #roundTimer .timerBar{ height:10px; background:#0c1326; border:1px solid #22345a; border-radius:999px; overflow:hidden; }
+    #roundTimer .timerFill{ height:100%; width:0%; transition:width .25s linear, filter .15s ease; background:linear-gradient(90deg, var(--red, #ff4d6d), #ffd166); }
+    body.turnB #roundTimer .timerFill{ background:linear-gradient(90deg, var(--blue, #4da3ff), #7ed957); }
+    #roundTimer .timerLow{ filter:saturate(1.2) brightness(1.15); }
+    #roundTimer .timerText{ margin-top:6px; font-variant-numeric:tabular-nums; font-size:13px; opacity:.9; }
   </style>
 </head>
 <body>
@@ -126,6 +144,16 @@
   <!-- Turn-Hinweis -->
   <div id="turnBanner" class="notice" style="display:none; margin-bottom:12px;">
     Teaminfo lädt…
+  </div>
+
+  <!-- NEU: Rundentimer (Spieler) -->
+  <div id="roundTimer" aria-live="polite">
+    <div class="timerHead">
+      <div><span class="timerPhase" id="ptPhase">—</span></div>
+      <div>Uhr für: <b id="ptOwner">—</b></div>
+    </div>
+    <div class="timerBar"><div class="timerFill" id="ptFill"></div></div>
+    <div class="timerText"><span id="ptText">00:00</span> verbleibend</div>
   </div>
 
   <div class="row">
@@ -241,6 +269,39 @@ function showToast(msg, ms=3500){
 }
 function show(id){ document.getElementById(id).classList.remove('hidden'); }
 function hide(id){ document.getElementById(id).classList.add('hidden'); }
+
+/* ===== NEU: Rundentimer (Spieler) ===== */
+const ptWrap  = document.getElementById('roundTimer');
+const ptPhase = document.getElementById('ptPhase');
+const ptOwner = document.getElementById('ptOwner');
+const ptFill  = document.getElementById('ptFill');
+const ptText  = document.getElementById('ptText');
+
+function fmtMMSS(s){
+  s = Math.max(0, Math.floor(s));
+  const m = Math.floor(s/60), sec = s%60;
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+function renderTimerPlayer(p){
+  if (!ptWrap) return;
+  if (!p || !p.running){
+    ptWrap.classList.remove('show');
+    ptFill.style.width = '0%';
+    ptText.textContent = '00:00';
+    return;
+  }
+  ptWrap.classList.add('show');
+  ptPhase.textContent = (p.phase === 'steal') ? 'Abstauber' : 'Runde';
+  ptPhase.className = 'timerPhase ' + (p.phase || 'main');
+  ptOwner.textContent = (p.owner === 'A' ? 'Team Rot' : 'Team Blau');
+
+  const left = p.secondsLeft ?? p.duration;
+  const pct = Math.max(0, Math.min(100, Math.round((left / p.duration) * 100)));
+  ptFill.style.width = pct + '%';
+  ptFill.classList.toggle('timerLow', left <= 10);
+  ptText.textContent = fmtMMSS(left);
+}
+socket.on('timer:update', renderTimerPlayer);
 
 // ===== Hintergrundmusik =====
 const bgm     = document.getElementById('bgm');
