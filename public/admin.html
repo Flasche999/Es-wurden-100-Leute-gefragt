@@ -32,6 +32,32 @@
     body.turnA .notice{ border-color:rgba(255,77,109,.55) }
     body.turnB .notice{ border-color:rgba(77,163,255,.55) }
 
+    /* ===== NEU: Rundentimer (Admin) ===== */
+    .timerWrap{
+      display:none; margin:10px 0 12px; padding:8px 10px; border-radius:10px;
+      background:rgba(16,25,51,.6); border:1px solid #2a3f6b;
+    }
+    .timerWrap.show{ display:block; }
+    .timerHead{
+      display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;
+      font-size:12px; opacity:.95;
+    }
+    .timerPhase{ padding:2px 8px; border-radius:999px; border:1px solid #2a3f6b; }
+    .timerPhase.main{ background:rgba(255,255,255,.06); }
+    .timerPhase.steal{ background:rgba(255,214,102,.12); border-color:#f6c453; }
+    .timerOwner{ font-weight:700; }
+    .timerBar{
+      height:10px; background:#0c1326; border:1px solid #22345a; border-radius:999px; overflow:hidden;
+    }
+    .timerFill{
+      height:100%; width:0%;
+      background:linear-gradient(90deg, var(--teamA), #ffd166);
+      transition: width .25s linear, background-color .2s ease, filter .15s ease;
+    }
+    body.turnB .timerFill{ background:linear-gradient(90deg, var(--teamB), #7ed957); }
+    .timerLow{ filter:saturate(1.2) brightness(1.15); }
+    .timerText{ margin-top:6px; font-variant-numeric:tabular-nums; font-size:13px; opacity:.9; }
+
     /* Spieler/Teams */
     #players .player{
       display:flex; align-items:center; justify-content:space-between;
@@ -181,6 +207,16 @@
   <!-- Zug-Banner -->
   <div id="turnBanner" class="notice" style="display:none; margin-bottom:12px;">—</div>
 
+  <!-- NEU: Rundentimer (Admin) -->
+  <div id="roundTimer" class="timerWrap" aria-live="polite">
+    <div class="timerHead">
+      <div><span class="timerPhase" id="tmPhase">—</span></div>
+      <div>Uhr für: <span class="timerOwner" id="tmOwner">—</span></div>
+    </div>
+    <div class="timerBar"><div class="timerFill" id="tmFill"></div></div>
+    <div class="timerText"><span id="tmText">00:00</span> verbleibend</div>
+  </div>
+
   <div class="row">
     <!-- Linke Spalte: Spieler & Spy-Chat -->
     <div class="card" style="flex:2">
@@ -328,6 +364,42 @@ const boardDiv   = document.getElementById('board');
 const answersDiv = document.getElementById('answers');
 const spyDiv     = document.getElementById('spy');
 const turnBanner = document.getElementById('turnBanner');
+
+/* ===== NEU: Timer-Refs (Admin) ===== */
+const tmWrap = document.getElementById('roundTimer');
+const tmPhase = document.getElementById('tmPhase');
+const tmOwner = document.getElementById('tmOwner');
+const tmFill  = document.getElementById('tmFill');
+const tmText  = document.getElementById('tmText');
+function fmtMMSS(s){
+  s = Math.max(0, Math.floor(s));
+  const m = Math.floor(s/60), sec = s%60;
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+function renderTimerAdmin(p){
+  if (!tmWrap) return;
+  if (!p || !p.running){
+    tmWrap.classList.remove('show');
+    if (tmFill) tmFill.style.width = '0%';
+    if (tmText) tmText.textContent = '00:00';
+    return;
+  }
+  tmWrap.classList.add('show');
+  if (tmPhase){
+    tmPhase.textContent = (p.phase === 'steal') ? 'Abstauber (0:30)' : 'Runde (1:30)';
+    tmPhase.className = 'timerPhase ' + (p.phase || 'main');
+  }
+  if (tmOwner) tmOwner.textContent = (p.owner === 'A' ? 'Team Rot' : 'Team Blau');
+
+  const left = p.secondsLeft ?? p.duration;
+  const pct  = Math.max(0, Math.min(100, Math.round((left / p.duration) * 100)));
+  if (tmFill){
+    tmFill.style.width = pct + '%';
+    tmFill.classList.toggle('timerLow', left <= 10);
+  }
+  if (tmText) tmText.textContent = fmtMMSS(left);
+}
+socket.on('timer:update', renderTimerAdmin);
 
 // ===== Hintergrundmusik =====
 const bgm     = document.getElementById('bgm');
